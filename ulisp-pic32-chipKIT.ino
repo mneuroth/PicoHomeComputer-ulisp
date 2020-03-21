@@ -1,7 +1,10 @@
-/* uLisp PIC32-chipKIT 3.1 - www.ulisp.com
+/* uLisp for PicoHomeComputer 3.1 - www.ulisp.com
    David Johnson-Davies - www.technoblogy.com - 20th February 2020
    
+   Based on ulisp-arm
    Modified for pic32-chipKIT by Michael Neuroth
+   cloned from https://github.com/mneuroth/ulisp-pic32-chipKIT
+   Modified for PicoHomeComputer by Michael Neuroth
 
    Licensed under the MIT license: https://opensource.org/licenses/MIT
 */
