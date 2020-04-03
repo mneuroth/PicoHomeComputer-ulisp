@@ -26,9 +26,16 @@ const char LispLibrary[] PROGMEM = "";
 
 // #include "LispLibrary.h"
 #include <setjmp.h>
+#if !defined(ARDUINO_ARCH_PIC32)  // or __PIC32 or PIC32 or __PIC32MX__
+#include <SoftSPI.h>
+SoftSPI SPI(/*CHIP_SELECT*/4,MOSI,MISO,SCK);
+#else
 #include <SPI.h>
+#endif
 #include <Wire.h>
 #include <limits.h>
+
+HardwareSerial * pLispSerial;
 
 #if defined(sdcardsupport)
 #include <SD.h>
@@ -4030,7 +4037,7 @@ void deletesymbol (symbol_t name) {
 }
 
 void testescape () {
-  if (Serial.read() == '~') error2(0, PSTR("escape!"));
+  if (pLispSerial->read() == '~') error2(0, PSTR("escape!"));
 }
 
 // Main evaluator
@@ -4043,7 +4050,7 @@ object *eval (object *form, object *env) {
   int TC=0;
   EVAL:
   // Enough space?
-  // Serial.println((uint32_t)sp);
+  // pLispSerial->println((uint32_t)sp);
   //if (((uint32_t)sp - (uint32_t)&end) < STACKDIFF) error2(0, PSTR("Stack overflow"));
   if (End != 0xA5) error2(0, PSTR("Stack overflow"));  
   if (Freespace <= WORKSPACESIZE>>4) gc(form, env);
@@ -4206,7 +4213,12 @@ inline int maxbuffer (char *buffer) {
 
 void pserial (char c) {
   LastPrint = c;
-  if (c == '\n') Serial.write('\r');
+  if (c == '\n') 
+  { 
+    pLispSerial->write('\r');
+    Serial.write('\r');
+  }
+  pLispSerial->write(c);
   Serial.write(c);
 }
 
@@ -4414,8 +4426,8 @@ int gserial () {
     LastChar = 0;
     return temp;
   }
-  while (!Serial.available());
-  char temp = Serial.read();
+  while (!pLispSerial->available());
+  char temp = pLispSerial->read();
   if (temp != '\n') pserial(temp);
   return temp;
 }
@@ -4581,24 +4593,123 @@ void initenv () {
 int blink_id;
 unsigned long blink_var;
 
+/********************************
+   Define some constants
+ ********************************/
+#define T3CON_ENABLE_BIT 0x8000
+#define T3CON_PRESCALER_BITS 0x0070
+#define T3_SOURCE_INT 0
+
+// Prescaler values
+// Don't change these. Set the prescaler below using these.
+#define T3_PRESCALE_1_1 0
+#define T3_PRESCALE_1_2 1
+#define T3_PRESCALE_1_4 2
+#define T3_PRESCALE_1_8 3
+#define T3_PRESCALE_1_16 4
+#define T3_PRESCALE_1_32 5
+#define T3_PRESCALE_1_64 6
+#define T3_PRESCALE_1_256 7
+
+/***************************************************************
+   USER DEFINED VARIABLES
+ ***************************************************************/
+// Set the prescaler value we want to use
+#define PRESCALE T3_PRESCALE_1_2    // Current it's set to 1:2
+
+// The DP32 runs at 40 MHz
+// The uC32 and WF32 run at 80 MHz
+#define CLOCK_FREQ 48000000   // Right now we're set for the DP32
+
+// Set our target frequency
+// This is the frequency that our interrupt will run at
+#define INT_FREQUENCY 400
+
+/********************************
+   Various Variables
+ ********************************/
+volatile uint32_t count = 0;
+volatile unsigned int flag = 0;
+int mask = 0; // This isn't used as a mask, but I can't bother to come up with a better name.
+
+// see: https://www.instructables.com/id/Timer-Interrupts-on-the-DP32/ 
+/********************************
+   ISR
+ ********************************/
+void __attribute__((interrupt)) blinkISR()
+{
+  count++;
+  flag = 1;
+  if( count % 200 == 1)
+  {
+     digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Toggle pin state    
+  }
+  clearIntFlag(_TIMER_3_IRQ);
+}
+
 // see: https://chipkit.net/wiki/index.php?title=Task_Manager
 void blink_task(int id, void * tptr) 
 {
    digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Toggle pin state
 }
 
+/********************************
+   Timer and interrupt setup function
+ ********************************/
+void start_timer_3(uint32_t frequency)
+{
+  uint32_t period;
+
+  // Calculate the period we need for our given frequency
+  if (PRESCALE == 7) period = 256; // 1:256 is a special case
+  else period = 1 << PRESCALE;
+  period = period * frequency;
+  period = CLOCK_FREQ / period;
+  // Summary of the above equation:
+  // period = CLOCK_FREQ / (1 << PRESCALE * frequency)
+  // We can't just use this equation because for some reason it
+  // doesn't work...
+
+  // Set up our timer
+  T3CONCLR = T3CON_ENABLE_BIT;            // Turn the timer off
+  T3CONCLR = T3CON_PRESCALER_BITS;        // Clear the old prescaler
+  mask = PRESCALE << 4;                   // Shift our new prescaler
+  mask = mask | T3CON;                    // Mask our prescaler
+  T3CON = mask;                           // Set the prescaler
+  TMR3 = 0;                               // Clear the counter
+  PR3 = period;                           // Set the period
+  T3CONSET = T3CON_ENABLE_BIT;            // Turn the timer on
+}
+
 void setup () {
-  Serial.begin(9600);
+  delay(5000);
+  Serial.begin(115200); // (9600);
+  Serial1.begin(115200);  // for communication with IO Processor (Propeller)
+  pLispSerial = &Serial1;
   int start = millis();
-  while ((millis() - start) < 5000) { if (Serial) break; }
+  while ((millis() - start) < 5000) { if (*pLispSerial) break; }
   initworkspace();
   initenv();
   initsleep();
 
-  // setup task for blinking LED
+  // setup pin for blinking LED
   pinMode(LED_PIN, OUTPUT);
-  blink_id = createTask(blink_task, 500, TASK_ENABLE, &blink_var);  
-   
+  
+  // the chipKIT task library works only if the loop() function is not blocked !
+  //blink_id = createTask(blink_task, 500, TASK_ENABLE, &blink_var);  
+  
+  // Start our timer with the given frequency
+  start_timer_3(INT_FREQUENCY); // The definition of this function is above
+  // Set our interrupt service routine to the blinkISR function above
+  setIntVector(_TIMER_3_VECTOR, blinkISR);
+  // The interrupt priority tells us how important the interrupt is
+  setIntPriority(_TIMER_3_VECTOR, 4, 0);
+  // If this is left high, the interrupt will execute immediately
+  clearIntFlag(_TIMER_3_IRQ);
+  // Enable our interrupt so it can run!
+  setIntEnable(_TIMER_3_IRQ);
+  
+  pln(pserial); 
   pfstring(PSTR("uLisp 3.1 "), pserial); pln(pserial);
 }
 
