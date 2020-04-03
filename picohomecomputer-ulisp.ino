@@ -36,6 +36,7 @@ SoftSPI SPI(/*CHIP_SELECT*/4,MOSI,MISO,SCK);
 #include <limits.h>
 
 HardwareSerial * pLispSerial;
+HardwareSerial * pLispSerialMonitor;
 
 #if defined(sdcardsupport)
 #include <SD.h>
@@ -4216,10 +4217,16 @@ void pserial (char c) {
   if (c == '\n') 
   { 
     pLispSerial->write('\r');
-    Serial.write('\r');
+    if( pLispSerialMonitor )
+    {
+      pLispSerialMonitor->write('\r');
+    }
   }
   pLispSerial->write(c);
-  Serial.write(c);
+  if( pLispSerialMonitor )
+  {
+    pLispSerialMonitor->write(c);
+  }
 }
 
 const char ControlCodes[] PROGMEM = "Null\0SOH\0STX\0ETX\0EOT\0ENQ\0ACK\0Bell\0Backspace\0Tab\0Newline\0VT\0"
@@ -4686,6 +4693,7 @@ void setup () {
   Serial.begin(115200); // (9600);
   Serial1.begin(115200);  // for communication with IO Processor (Propeller)
   pLispSerial = &Serial1;
+  pLispSerialMonitor = &Serial;
   int start = millis();
   while ((millis() - start) < 5000) { if (*pLispSerial) break; }
   initworkspace();
