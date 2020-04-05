@@ -35,8 +35,13 @@ SoftSPI SPI(/*CHIP_SELECT*/4,MOSI,MISO,SCK);
 #include <Wire.h>
 #include <limits.h>
 
+#include "libs/RTClib.h"
+#include "libs/RTClib.cpp"
+
 HardwareSerial * pLispSerial;
 HardwareSerial * pLispSerialMonitor;
+
+RTC_DS1307 rtc;
 
 #if defined(sdcardsupport)
 #include <SD.h>
@@ -99,7 +104,9 @@ CODECHAR, CHARACTERP, STRINGP, STRINGEQ, STRINGLESS, STRINGGREATER, SORT, STRING
 READFROMSTRING, PRINCTOSTRING, PRIN1TOSTRING, LOGAND, LOGIOR, LOGXOR, LOGNOT, ASH, LOGBITP, EVAL, GLOBALS,
 LOCALS, MAKUNBOUND, BREAK, READ, PRIN1, PRINT, PRINC, TERPRI, READBYTE, READLINE, WRITEBYTE, WRITESTRING,
 WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD, DIGITALWRITE,
-ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY, ENDFUNCTIONS };
+ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY, 
+NOW, WHO,
+ENDFUNCTIONS };
 
 // Typedefs
 
@@ -3608,6 +3615,26 @@ object *fn_listlibrary (object *args, object *env) {
   return symbol(NOTHING); 
 }
 
+object *fn_now (object *args, object *env) {
+  (void) args, (void) env;
+  DateTime nowValue = rtc.now();
+  object *yearVal = number(nowValue.year());
+  object *monthVal = number(nowValue.month());
+  object *dayVal = number(nowValue.day());
+  object *hourVal = number(nowValue.hour());
+  object *minuteVal = number(nowValue.minute());
+  object *secondVal = number(nowValue.seconds());
+  object *list = cons(yearVal,cons(monthVal,cons(dayVal,cons(hourVal,cons(minuteVal,cons(secondVal,nil))))));
+  return list; 
+}
+
+object *fn_who (object *args, object *env) {
+  (void) args, (void) env;
+  object *val = number(42);
+  object *list = cons(val,nil);
+  return list; 
+}
+
 // Insert your own function definitions here
 
 // Built-in procedure names - stored in PROGMEM
@@ -3793,6 +3820,8 @@ const char string177[] PROGMEM = "pprint";
 const char string178[] PROGMEM = "pprintall";
 const char string179[] PROGMEM = "require";
 const char string180[] PROGMEM = "list-library";
+const char string181[] PROGMEM = "now";
+const char string182[] PROGMEM = "who";
 
 const tbl_entry_t lookup_table[] PROGMEM = {
   { string0, NULL, 0, 0 },
@@ -3976,6 +4005,8 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string178, fn_pprintall, 0, 0 },
   { string179, fn_require, 1, 1 },
   { string180, fn_listlibrary, 0, 0 },
+  { string181, fn_now, 0, 0 },
+  { string182, fn_who, 0, 0 },
 };
 
 // Table lookup functions
@@ -4689,6 +4720,7 @@ void start_timer_3(uint32_t frequency)
 }
 
 void setup () {
+  rtc.begin();
   delay(5000);
   Serial.begin(115200); // (9600);
   Serial1.begin(115200);  // for communication with IO Processor (Propeller)
