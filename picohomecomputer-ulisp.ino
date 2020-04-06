@@ -105,7 +105,7 @@ READFROMSTRING, PRINCTOSTRING, PRIN1TOSTRING, LOGAND, LOGIOR, LOGXOR, LOGNOT, AS
 LOCALS, MAKUNBOUND, BREAK, READ, PRIN1, PRINT, PRINC, TERPRI, READBYTE, READLINE, WRITEBYTE, WRITESTRING,
 WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD, DIGITALWRITE,
 ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY, 
-NOW, WHO,
+NOW, SETRTC, WHO,
 ENDFUNCTIONS };
 
 // Typedefs
@@ -3628,6 +3628,34 @@ object *fn_now (object *args, object *env) {
   return list; 
 }
 
+object *fn_setrtc (object *args, object *env) {
+  (void) args, (void) env;
+
+  int yearVal, monthVal, dayVal, hourVal, minuteVal, secondVal;
+  object * val = car(args);
+  yearVal = val->integer;
+  args = cdr(args);
+  val = car(args);
+  monthVal = val->integer;
+  args = cdr(args);
+  val = car(args);
+  dayVal = val->integer;
+  args = cdr(args);
+  val = car(args);
+  hourVal = val->integer;
+  args = cdr(args);
+  val = car(args);
+  minuteVal = val->integer;
+  args = cdr(args);
+  val = car(args);
+  secondVal = val->integer;
+  args = cdr(args);
+  
+  DateTime newValue(yearVal, monthVal, dayVal, hourVal, minuteVal, secondVal);
+  rtc.adjust(newValue);
+  return nil;
+}
+
 object *fn_who (object *args, object *env) {
   (void) args, (void) env;
   object *val = number(42);
@@ -3821,7 +3849,8 @@ const char string178[] PROGMEM = "pprintall";
 const char string179[] PROGMEM = "require";
 const char string180[] PROGMEM = "list-library";
 const char string181[] PROGMEM = "now";
-const char string182[] PROGMEM = "who";
+const char string182[] PROGMEM = "setrtc";
+const char string183[] PROGMEM = "who";
 
 const tbl_entry_t lookup_table[] PROGMEM = {
   { string0, NULL, 0, 0 },
@@ -4006,7 +4035,8 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string179, fn_require, 1, 1 },
   { string180, fn_listlibrary, 0, 0 },
   { string181, fn_now, 0, 0 },
-  { string182, fn_who, 0, 0 },
+  { string182, fn_setrtc, 6, 6 },
+  { string183, fn_who, 0, 0 },
 };
 
 // Table lookup functions
