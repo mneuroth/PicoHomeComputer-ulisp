@@ -26,9 +26,14 @@ const char LispLibrary[] PROGMEM = "";
 
 // #include "LispLibrary.h"
 #include <setjmp.h>
-#if !defined(ARDUINO_ARCH_PIC32)  // or __PIC32 or PIC32 or __PIC32MX__
+#if defined(ARDUINO_ARCH_PIC32)  // or __PIC32 or PIC32 or __PIC32MX__
 #include <SoftSPI.h>
-SoftSPI SPI(/*CHIP_SELECT*/4,MOSI,MISO,SCK);
+SoftSPI SPI(/*CHIP_SELECT*/5,MOSI,MISO,SCK);  // TODO --> CHIP SELECT anpassen !!!
+#define _WITH_SOFT_SPI
+#define SPI_MODE0 SSPI_MODE0
+#define SPI_MODE1 SSPI_MODE1
+#define SPI_MODE2 SSPI_MODE2
+#define SPI_MODE3 SSPI_MODE3
 #else
 #include <SPI.h>
 #endif
@@ -37,11 +42,14 @@ SoftSPI SPI(/*CHIP_SELECT*/4,MOSI,MISO,SCK);
 
 #include "libs/RTClib.h"
 #include "libs/RTClib.cpp"
+#include "libs/SRAMsimple.h"
+#include "libs/SRAMsimple.cpp"
 
 HardwareSerial * pLispSerial;
 HardwareSerial * pLispSerialMonitor;
 
 RTC_DS1307 rtc;
+SRAMsimple sram;
 
 #if defined(sdcardsupport)
 #include <SD.h>
@@ -105,7 +113,7 @@ READFROMSTRING, PRINCTOSTRING, PRIN1TOSTRING, LOGAND, LOGIOR, LOGXOR, LOGNOT, AS
 LOCALS, MAKUNBOUND, BREAK, READ, PRIN1, PRINT, PRINC, TERPRI, READBYTE, READLINE, WRITEBYTE, WRITESTRING,
 WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD, DIGITALWRITE,
 ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY, 
-NOW, SETRTC, WHO,
+NOW, SETRTC, MEMBREAD, MBWRITE, WHO,
 ENDFUNCTIONS };
 
 // Typedefs
@@ -1780,6 +1788,7 @@ object *sp_withspi (object *args, object *env) {
   }
   object *pair = cons(var, stream(SPISTREAM, pin + 128*address));
   push(pair,env);
+#ifndef _WITH_SOFT_SPI
   SPIClass *spiClass = &SPI;
   #if defined(ARDUINO_NRF52840_CLUE) || defined(ARDUINO_GRAND_CENTRAL_M4)
   if (address == 1) spiClass = &SPI1;
@@ -1792,6 +1801,9 @@ object *sp_withspi (object *args, object *env) {
   digitalWrite(pin, HIGH);
   (*spiClass).endTransaction();
   return result;
+#else
+  return 0;  
+#endif  
 }
 
 object *sp_withsdcard (object *args, object *env) {
@@ -3630,7 +3642,6 @@ object *fn_now (object *args, object *env) {
 
 object *fn_setrtc (object *args, object *env) {
   (void) args, (void) env;
-
   int yearVal, monthVal, dayVal, hourVal, minuteVal, secondVal;
   object * val = car(args);
   yearVal = val->integer;
@@ -3650,10 +3661,28 @@ object *fn_setrtc (object *args, object *env) {
   val = car(args);
   secondVal = val->integer;
   args = cdr(args);
-  
   DateTime newValue(yearVal, monthVal, dayVal, hourVal, minuteVal, secondVal);
   rtc.adjust(newValue);
   return nil;
+}
+
+object *fn_membread (object *args, object *env) {
+  (void) args, (void) env;
+  object * val = car(args);
+  uint32_t addrVal = (uint32_t)val->integer;
+  byte retVal = sram.ReadByte(addrVal);
+  return number((int)retVal);
+}
+
+object *fn_membwrite (object *args, object *env) {
+  (void) args, (void) env;
+  object * val = car(args);
+  uint32_t addrVal = (uint32_t)val->integer;
+  args = cdr(args);
+  val = car(args);
+  byte valVal = (byte)val->integer;
+  sram.WriteByte(addrVal, valVal);
+  return number((int)valVal);;
 }
 
 object *fn_who (object *args, object *env) {
@@ -3850,7 +3879,9 @@ const char string179[] PROGMEM = "require";
 const char string180[] PROGMEM = "list-library";
 const char string181[] PROGMEM = "now";
 const char string182[] PROGMEM = "setrtc";
-const char string183[] PROGMEM = "who";
+const char string183[] PROGMEM = "membread";
+const char string184[] PROGMEM = "membwrite";
+const char string185[] PROGMEM = "who";
 
 const tbl_entry_t lookup_table[] PROGMEM = {
   { string0, NULL, 0, 0 },
@@ -4036,7 +4067,9 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string180, fn_listlibrary, 0, 0 },
   { string181, fn_now, 0, 0 },
   { string182, fn_setrtc, 6, 6 },
-  { string183, fn_who, 0, 0 },
+  { string183, fn_membread, 1, 1 },
+  { string184, fn_membwrite, 2, 2 },
+  { string185, fn_who, 0, 0 },
 };
 
 // Table lookup functions
@@ -4751,7 +4784,8 @@ void start_timer_3(uint32_t frequency)
 
 void setup () {
   rtc.begin();
-  delay(5000);
+  SPI.begin();
+  delay(4000);
   Serial.begin(115200); // (9600);
   Serial1.begin(115200);  // for communication with IO Processor (Propeller)
   pLispSerial = &Serial1;
