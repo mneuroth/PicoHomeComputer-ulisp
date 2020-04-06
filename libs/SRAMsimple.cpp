@@ -42,18 +42,15 @@ void SPI2_Exchange( uint8_t *pTransmitData, uint8_t *pReceiveData )
 /*  Set up the memory chip to either single byte or sequence of bytes mode **********/
 void SRAMsimple::SetMode(byte CSpin, char Mode) {           // Select for single or multiple byte transfer
   CS = CSpin; // set global variable CS to user-defined CS pin
-//  SPI.beginTransaction(settings);
   pinMode(CS, OUTPUT);	                        // set CS pin to output mode
   digitalWrite(CS, LOW);                        // set SPI slave select LOW
   SPI.transfer(WRMR);                           // command to write to mode register
   SPI.transfer(Mode);                           // set for sequential mode
   digitalWrite(CS, HIGH);                       // release chip select to finish command
-//  SPI.endTransaction();
 }
 
 /************ Byte transfer functions ***************************/
 void SRAMsimple::WriteByte(uint32_t address, byte data_byte) {
-//  SPI.beginTransaction(settings);
   SetMode(CS, ByteMode);                // set to send/receive single byte of data
   digitalWrite(CS, LOW);                         // set SPI slave select LOW;
   SPI.transfer(CMD_WRITE);                       // send WRITE command to the memory chip
@@ -62,11 +59,9 @@ void SRAMsimple::WriteByte(uint32_t address, byte data_byte) {
   SPI.transfer((byte)address);                   // send low byte of address
   SPI.transfer(data_byte);                       // write the data to the memory location
   digitalWrite(CS, HIGH);                        //set SPI slave select HIGH
-//  SPI.endTransaction();
 }
 
 byte SRAMsimple::ReadByte(uint32_t address) {
-//  SPI.beginTransaction(settings);
   SetMode(CS, ByteMode);                // set to send/receive single byte of data
   byte read_byte;
   digitalWrite(CS, LOW);                         // set SPI slave select LOW;
@@ -75,12 +70,7 @@ byte SRAMsimple::ReadByte(uint32_t address) {
   SPI.transfer((byte)(address >> 8));            // send middle byte of address
   SPI.transfer((byte)address);                   // send low byte of address
   read_byte = SPI.transfer(0x00);                // read the byte at that address
-  //uint8_t outData = 0;
-  //uint8_t inData = 0;
-  //SPI2_Exchange(&outData, &inData);
-  //read_byte = inData;
   digitalWrite(CS, HIGH);                        // set SPI slave select HIGH;
-//  SPI.endTransaction();
   return read_byte;                              // send data back to the calling function
 }
 

@@ -6,4 +6,4 @@ This implementation uses source code from other projects:
 * Support for [real time clock DS1307](https://github.com/adafruit/RTClib)
 * Support for [SRAM chip](https://github.com/dndubins/SRAMsimple)
 * Support for [Ethernet chip ENC28J60](https://github.com/njh/EtherCard) or the [port for chipKIT](https://github.com/mneuroth/PicoHomeComputer-EtherCard)
-* Support for [SD card](https://github.com/adafruit/SD)
+* Support for [SD card](https://github.com/adafruit/SD) or [SdFat](https://github.com/greiman/SdFat)
