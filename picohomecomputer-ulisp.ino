@@ -3686,7 +3686,7 @@ object *fn_now (object *args, object *env) {
 }
 
 object *fn_setrtc (object *args, object *env) {
-  (void) args, (void) env;
+  (void) env;
   int yearVal, monthVal, dayVal, hourVal, minuteVal, secondVal;
   object * val = car(args);
   yearVal = val->integer;
@@ -3713,7 +3713,7 @@ object *fn_setrtc (object *args, object *env) {
 
 // (membread index)
 object *fn_membread (object *args, object *env) {
-  (void) args, (void) env;
+  (void) env;
   object * val = car(args);
   uint32_t addrVal = (uint32_t)val->integer;
   byte retVal = sram.ReadByte(addrVal);
@@ -3734,7 +3734,7 @@ object *fn_membwrite (object *args, object *env) {
 
 // (mem-string-read index size)
 object *fn_memstringread (object *args, object *env) {
-  (void) args, (void) env;
+  (void) env;
   object * val = first(args);
   uint32_t addrVal = (uint32_t)val->integer;
   val = second(args);
@@ -3748,7 +3748,7 @@ object *fn_memstringread (object *args, object *env) {
 
 // (mem-string-write index s)
 object *fn_memstringwrite (object *args, object *env) {
-  (void) args, (void) env;
+  (void) env;
   object * val = first(args);
   uint32_t addrVal = (uint32_t)val->integer;
   val = second(args);
@@ -3757,9 +3757,9 @@ object *fn_memstringwrite (object *args, object *env) {
     char * s = cstringbuf(val);
     int sizeVal = strlen(s);
     sram.WriteByteArray(addrVal,(byte *)s,sizeVal);
-    return number(1); // T
+    return tee;
   }
-  return number(0);
+  return nil;
 }
 
 object *fn_info (object *args, object *env) {
