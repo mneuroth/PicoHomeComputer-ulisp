@@ -82,7 +82,11 @@ void SRAMsimple::WriteByteArray(uint32_t address, byte *data, uint16_t big) {
   SPI.transfer((byte)(address >> 16));            // send high byte of address
   SPI.transfer((byte)(address >> 8));             // send middle byte of address
   SPI.transfer((byte)address);                    // send low byte of address
-  //PATCH  SPI.transfer(data, big);                        // transfer an array of data => needs array name & size
+#ifdef _SOFTSPI_H_    
+  SPI.transfer(big, data);                        // transfer an array of data => needs array name & size
+#else
+  SPI.transfer(data, big);                        // transfer an array of data => needs array name & size
+#endif    
   digitalWrite(CS, HIGH);                         // set SPI slave select HIGH
 }
 
@@ -110,7 +114,11 @@ void SRAMsimple::WriteInt(uint32_t address, int data) {
   SPI.transfer((byte)(address >> 16));            // send high byte of address
   SPI.transfer((byte)(address >> 8));             // send middle byte of address
   SPI.transfer((byte)address);                    // send low byte of address
-  //PATCH  SPI.transfer(temp, 2);                          // transfer an array of data => needs array name & size (2 elements)
+#ifdef _SOFTSPI_H_    
+  SPI.transfer(2, temp);                          // transfer an array of data => needs array name & size (2 elements)
+#else
+  SPI.transfer(temp, 2);                          // transfer an array of data => needs array name & size (2 elements)
+#endif
   digitalWrite(CS, HIGH);                         // set SPI slave select HIGH
 }
 
@@ -146,7 +154,11 @@ void SRAMsimple::WriteIntArray(uint32_t address, int *data, uint16_t big) {
   SPI.transfer((byte)(address >> 16));            // send high byte of address
   SPI.transfer((byte)(address >> 8));             // send middle byte of address
   SPI.transfer((byte)address);                    // send low byte of address
-  //PATCH   SPI.transfer(temp, big*2);                      // transfer an array of data => needs array name & size (2 elements)
+#ifdef _SOFTSPI_H_    
+  SPI.transfer(big*2, temp);                      // transfer an array of data => needs array name & size (2 elements)
+#else
+  SPI.transfer(temp, big*2);                      // transfer an array of data => needs array name & size (2 elements)
+#endif
   digitalWrite(CS, HIGH);                         // set SPI slave select HIGH
 }
 
@@ -180,7 +192,11 @@ void SRAMsimple::WriteUnsignedInt(uint32_t address, unsigned int data) {
   SPI.transfer((byte)(address >> 16));            // send high byte of address
   SPI.transfer((byte)(address >> 8));             // send middle byte of address
   SPI.transfer((byte)address);                    // send low byte of address
-  //PATCH  SPI.transfer(temp, 2);                          // transfer an array of data => needs array name & size (2 elements)
+#ifdef _SOFTSPI_H_    
+  SPI.transfer(2, temp);                          // transfer an array of data => needs array name & size (2 elements)
+#else
+  SPI.transfer(temp, 2);                          // transfer an array of data => needs array name & size (2 elements)
+#endif
   digitalWrite(CS, HIGH);                         // set SPI slave select HIGH
 }
 
@@ -216,7 +232,11 @@ void SRAMsimple::WriteUnsignedIntArray(uint32_t address, unsigned int *data, uin
   SPI.transfer((byte)(address >> 16));            // send high byte of address
   SPI.transfer((byte)(address >> 8));             // send middle byte of address
   SPI.transfer((byte)address);                    // send low byte of address
-  //PATCH   SPI.transfer(temp, big*2);                      // transfer an array of data => needs array name & size (2 elements)
+#ifdef _SOFTSPI_H_  
+  SPI.transfer(big*2, temp);                      // transfer an array of data => needs array name & size (2 elements)
+#else  
+  SPI.transfer(temp, big*2);                      // transfer an array of data => needs array name & size (2 elements)
+#endif
   digitalWrite(CS, HIGH);                         // set SPI slave select HIGH
 }
 
@@ -252,7 +272,11 @@ void SRAMsimple::WriteLong(uint32_t address, long data) {
   SPI.transfer((byte)(address >> 16));            // send high byte of address
   SPI.transfer((byte)(address >> 8));             // send middle byte of address
   SPI.transfer((byte)address);                    // send low byte of address
-  //PATCH   SPI.transfer(temp, 4);                          // transfer an array of data => needs array name & size (4 elements)
+#ifdef _SOFTSPI_H_    
+  SPI.transfer(4, temp);                          // transfer an array of data => needs array name & size (4 elements)
+#else
+  SPI.transfer(temp, 4);                          // transfer an array of data => needs array name & size (4 elements)
+#endif
   digitalWrite(CS, HIGH);                         // set SPI slave select HIGH
 }
 
@@ -290,7 +314,11 @@ void SRAMsimple::WriteLongArray(uint32_t address, long *data, uint16_t big) {
   SPI.transfer((byte)(address >> 16));            // send high byte of address
   SPI.transfer((byte)(address >> 8));             // send middle byte of address
   SPI.transfer((byte)address);                    // send low byte of address
-  //PATCH   SPI.transfer(temp, big*4);                      // transfer an array of data => needs array name & size (2 elements)
+#ifdef _SOFTSPI_H_    
+  SPI.transfer(big*4, temp);                      // transfer an array of data => needs array name & size (2 elements)
+#else
+  SPI.transfer(temp, big*4);                      // transfer an array of data => needs array name & size (2 elements)
+#endif
   digitalWrite(CS, HIGH);                         // set SPI slave select HIGH
 }
 
@@ -326,7 +354,11 @@ void SRAMsimple::WriteUnsignedLong(uint32_t address, unsigned long data) {
   SPI.transfer((byte)(address >> 16));            // send high byte of address
   SPI.transfer((byte)(address >> 8));             // send middle byte of address
   SPI.transfer((byte)address);                    // send low byte of address
-  //PATCH   SPI.transfer(temp, 4);                          // transfer an array of data => needs array name & size (4 elements)
+#ifdef _SOFTSPI_H_    
+  SPI.transfer(4, temp);                          // transfer an array of data => needs array name & size (4 elements)
+#else
+  SPI.transfer(temp, 4);                          // transfer an array of data => needs array name & size (4 elements)
+#endif
   digitalWrite(CS, HIGH);                         // set SPI slave select HIGH
 }
 
@@ -364,7 +396,11 @@ void SRAMsimple::WriteUnsignedLongArray(uint32_t address, unsigned long *data, u
   SPI.transfer((byte)(address >> 16));            // send high byte of address
   SPI.transfer((byte)(address >> 8));             // send middle byte of address
   SPI.transfer((byte)address);                    // send low byte of address
-  //PATCH   SPI.transfer(temp, big*4);                      // transfer an array of data => needs array name & size (2 elements)
+#ifdef _SOFTSPI_H_    
+  SPI.transfer(big*4, temp);                      // transfer an array of data => needs array name & size (2 elements)
+#else
+  SPI.transfer(temp, big*4);                      // transfer an array of data => needs array name & size (2 elements)
+#endif  
   digitalWrite(CS, HIGH);                         // set SPI slave select HIGH
 }
 
@@ -396,7 +432,11 @@ void SRAMsimple::WriteFloat(uint32_t address, float data) {
   SPI.transfer((byte)(address >> 16));            // send high byte of address
   SPI.transfer((byte)(address >> 8));             // send middle byte of address
   SPI.transfer((byte)address);                    // send low byte of address
-  //PATCH  SPI.transfer(temp, 4);                          // transfer an array of data => needs array name & size (4 elements)
+#ifdef _SOFTSPI_H_    
+  SPI.transfer(4, temp);                          // transfer an array of data => needs array name & size (4 elements)
+#else
+  SPI.transfer(temp, 4);                          // transfer an array of data => needs array name & size (4 elements)
+#endif
   digitalWrite(CS, HIGH);                         // set SPI slave select HIGH
 }
 
@@ -435,7 +475,11 @@ void SRAMsimple::WriteFloatArray(uint32_t address, float *data, uint16_t big) {
   SPI.transfer((byte)(address >> 16));            // send high byte of address
   SPI.transfer((byte)(address >> 8));             // send middle byte of address
   SPI.transfer((byte)address);                    // send low byte of address
-  //PATCH   SPI.transfer(holder, big*4);                    // transfer an array of data => needs array name & size (4 elements)
+#ifdef _SOFTSPI_H_    
+  SPI.transfer(big*4, holder);                    // transfer an array of data => needs array name & size (4 elements)
+#else
+  SPI.transfer(holder, big*4);                    // transfer an array of data => needs array name & size (4 elements)
+#endif
   digitalWrite(CS, HIGH);                         // set SPI slave select HIGH
 }
 

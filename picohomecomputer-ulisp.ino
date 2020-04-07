@@ -113,7 +113,7 @@ READFROMSTRING, PRINCTOSTRING, PRIN1TOSTRING, LOGAND, LOGIOR, LOGXOR, LOGNOT, AS
 LOCALS, MAKUNBOUND, BREAK, READ, PRIN1, PRINT, PRINC, TERPRI, READBYTE, READLINE, WRITEBYTE, WRITESTRING,
 WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD, DIGITALWRITE,
 ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY, 
-NOW, SETRTC, MEMBREAD, MBWRITE, WHO,
+NOW, SETRTC, MEMBREAD, MEMBWRITE, MEMSTRINGREAD, MEMSTRINGWRITE, INFO, CSTRING,
 ENDFUNCTIONS };
 
 // Typedefs
@@ -164,7 +164,7 @@ typedef int BitOrder;
 #if defined(_BOARD_PICO_HOMECOMPUTER_)
 #define PSTR(s) s
 #define PROGMEM
-#define WORKSPACESIZE 3072-SDSIZE       /* Cells (8*bytes) */
+#define WORKSPACESIZE /*3072*/4096-SDSIZE       /* Cells (8*bytes) */
 #define SYMBOLTABLESIZE 512             /* Bytes */
 #define CODESIZE 128                    /* Bytes */
 #define STACKDIFF 320
@@ -1788,22 +1788,26 @@ object *sp_withspi (object *args, object *env) {
   }
   object *pair = cons(var, stream(SPISTREAM, pin + 128*address));
   push(pair,env);
-#ifndef _WITH_SOFT_SPI
+#ifndef _SOFTSPI_H_
   SPIClass *spiClass = &SPI;
+#else
+  SoftSPI *spiClass = &SPI;
+#endif
   #if defined(ARDUINO_NRF52840_CLUE) || defined(ARDUINO_GRAND_CENTRAL_M4)
   if (address == 1) spiClass = &SPI1;
   #endif
   (*spiClass).begin();
+#ifndef _SOFTSPI_H_
   (*spiClass).beginTransaction(SPISettings(((unsigned long)clock * 1000), bitorder, mode));
+#endif
   digitalWrite(pin, LOW);
   object *forms = cdr(args);
   object *result = eval(tf_progn(forms,env), env);
   digitalWrite(pin, HIGH);
+#ifndef _SOFTSPI_H_
   (*spiClass).endTransaction();
+#endif
   return result;
-#else
-  return 0;  
-#endif  
 }
 
 object *sp_withsdcard (object *args, object *env) {
@@ -3627,6 +3631,47 @@ object *fn_listlibrary (object *args, object *env) {
   return symbol(NOTHING); 
 }
 
+// Insert your own function definitions here
+
+// see: converting between C and uLisp: http://www.ulisp.com/show?2E0A
+object *lispstring (char *s) {
+  object *obj = myalloc();
+  obj->type = STRING;
+  char ch = *s++;
+  object *head = NULL;
+  int chars = 0;
+  while (ch) {
+    if (ch == '\\') ch = *s++;
+    buildstring(ch, &chars, &head);
+    ch = *s++;
+  }
+  obj->cdr = head;
+  return obj;
+}
+
+char *cstring (object *form, char *buffer, int buflen) {
+  int index = 0;
+  form = cdr(form);
+  while (form != NULL) {
+    int chars = form->integer;
+    for (int i=(sizeof(int)-1)*8; i>=0; i=i-8) {
+      char ch = chars>>i & 0xFF;
+      if (ch) {
+        if (index >= buflen-1) error2(CSTRING, PSTR("no room for string"));
+        buffer[index++] = ch;
+      }
+    }
+    form = car(form);
+  }
+  buffer[index] = '\0';
+  return buffer;
+}
+
+char *cstringbuf (object *arg) {
+  cstring(arg, SymbolTop, SYMBOLTABLESIZE-(SymbolTop-SymbolTable));
+  return SymbolTop;
+}
+
 object *fn_now (object *args, object *env) {
   (void) args, (void) env;
   DateTime nowValue = rtc.now();
@@ -3663,9 +3708,10 @@ object *fn_setrtc (object *args, object *env) {
   args = cdr(args);
   DateTime newValue(yearVal, monthVal, dayVal, hourVal, minuteVal, secondVal);
   rtc.adjust(newValue);
-  return nil;
+  return symbol(NOTHING);
 }
 
+// (membread index)
 object *fn_membread (object *args, object *env) {
   (void) args, (void) env;
   object * val = car(args);
@@ -3674,6 +3720,7 @@ object *fn_membread (object *args, object *env) {
   return number((int)retVal);
 }
 
+// (membwrite index value)
 object *fn_membwrite (object *args, object *env) {
   (void) args, (void) env;
   object * val = car(args);
@@ -3685,14 +3732,49 @@ object *fn_membwrite (object *args, object *env) {
   return number((int)valVal);;
 }
 
-object *fn_who (object *args, object *env) {
+// (mem-string-read index size)
+object *fn_memstringread (object *args, object *env) {
   (void) args, (void) env;
-  object *val = number(42);
-  object *list = cons(val,nil);
-  return list; 
+  object * val = first(args);
+  uint32_t addrVal = (uint32_t)val->integer;
+  val = second(args);
+  uint32_t sizeVal = (uint32_t)val->integer;
+  byte sBuffer[sizeVal+1];
+  sram.ReadByteArray(addrVal,sBuffer,sizeVal);
+  sBuffer[sizeVal] = 0;
+  object * result = lispstring((char *)sBuffer);
+  return result;
 }
 
-// Insert your own function definitions here
+// (mem-string-write index s)
+object *fn_memstringwrite (object *args, object *env) {
+  (void) args, (void) env;
+  object * val = first(args);
+  uint32_t addrVal = (uint32_t)val->integer;
+  val = second(args);
+  if( stringp(val) )
+  {
+    char * s = cstringbuf(val);
+    int sizeVal = strlen(s);
+    sram.WriteByteArray(addrVal,(byte *)s,sizeVal);
+    return number(1); // T
+  }
+  return number(0);
+}
+
+object *fn_info (object *args, object *env) {
+  (void) args, (void) env;
+  object *val1 = number(sizeof(byte));
+  object *val2 = number(sizeof(int));
+  object *val3 = number(sizeof(uint16_t));
+  object *val4 = number(sizeof(uint32_t));
+  object *val5 = number(sizeof(float));
+  object *val6 = number(sizeof(double));
+  object *val7 = number(sizeof(bool));
+  object *val8 = number(sizeof(char));
+  object *list = cons(val1,cons(val2,cons(val3,cons(val4,cons(val5,cons(val6,cons(val7,cons(val8,nil))))))));
+  return list; 
+}
 
 // Built-in procedure names - stored in PROGMEM
 
@@ -3881,7 +3963,9 @@ const char string181[] PROGMEM = "now";
 const char string182[] PROGMEM = "setrtc";
 const char string183[] PROGMEM = "membread";
 const char string184[] PROGMEM = "membwrite";
-const char string185[] PROGMEM = "who";
+const char string185[] PROGMEM = "mem-string-read";
+const char string186[] PROGMEM = "mem-string-write";
+const char string187[] PROGMEM = "info";
 
 const tbl_entry_t lookup_table[] PROGMEM = {
   { string0, NULL, 0, 0 },
@@ -4069,7 +4153,9 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string182, fn_setrtc, 6, 6 },
   { string183, fn_membread, 1, 1 },
   { string184, fn_membwrite, 2, 2 },
-  { string185, fn_who, 0, 0 },
+  { string185, fn_memstringread, 2, 2 },
+  { string186, fn_memstringwrite, 2, 2 },
+  { string187, fn_info, 0, 0 },
 };
 
 // Table lookup functions
