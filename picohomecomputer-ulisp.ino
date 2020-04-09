@@ -18,9 +18,18 @@ const char LispLibrary[] PROGMEM = "";
 #define printfreespace
 #define serialmonitor
 // #define printgcs
-// #define sdcardsupport
-// #define lisplibrary
+#define sdcardsupport
+#define lisplibrary
 //#define assemblerlist
+
+#define SOFT_SPI
+
+#define PICO_HOME_COMPUTER
+
+#define PICO_HOME_COMPUTER_CS_SDCARD_PIN    9
+#define PICO_HOME_COMPUTER_CS_SRAM_PIN      5
+#define PICO_HOME_COMPUTER_CS_LAN_PIN       4
+#define PICO_HOME_COMPUTER_CS_EXTENSION_PIN 1
 
 // Includes
 
@@ -28,7 +37,7 @@ const char LispLibrary[] PROGMEM = "";
 #include <setjmp.h>
 #if defined(ARDUINO_ARCH_PIC32)  // or __PIC32 or PIC32 or __PIC32MX__
 #include <SoftSPI.h>
-SoftSPI SPI(/*CHIP_SELECT*/5,MOSI,MISO,SCK);  // TODO --> CHIP SELECT anpassen !!!
+SoftSPI SPI(/*CHIP_SELECT*/PICO_HOME_COMPUTER_CS_SRAM_PIN,MOSI,MISO,SCK);  // TODO --> CHIP SELECT anpassen !!!
 #define _WITH_SOFT_SPI
 #define SPI_MODE0 SSPI_MODE0
 #define SPI_MODE1 SSPI_MODE1
@@ -52,8 +61,16 @@ RTC_DS1307 rtc;
 SRAMsimple sram;
 
 #if defined(sdcardsupport)
-#include <SD.h>
+#include "libs/SD.h"
+#include "libs/SD.cpp"
+#include "libs/file.cpp"
+#include "libs/utility/SdFile.cpp"
+#include "libs/utility/SdVolume.cpp"
+#include "libs/utility/Sd2Card.cpp"
 #define SDSIZE 172
+Sd2Card card;
+SdVolume volume;
+SdFile root;
 #else
 #define SDSIZE 0
 #endif
@@ -113,7 +130,7 @@ READFROMSTRING, PRINCTOSTRING, PRIN1TOSTRING, LOGAND, LOGIOR, LOGXOR, LOGNOT, AS
 LOCALS, MAKUNBOUND, BREAK, READ, PRIN1, PRINT, PRINC, TERPRI, READBYTE, READLINE, WRITEBYTE, WRITESTRING,
 WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD, DIGITALWRITE,
 ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY, 
-NOW, SETRTC, MEMBREAD, MEMBWRITE, MEMSTRINGREAD, MEMSTRINGWRITE, INFO, CSTRING,
+NOW, SETRTC, MEMBREAD, MEMBWRITE, MEMSTRINGREAD, MEMSTRINGWRITE, INFO, SHELL, CSTRING,
 ENDFUNCTIONS };
 
 // Typedefs
@@ -168,7 +185,7 @@ typedef int BitOrder;
 #define SYMBOLTABLESIZE 512             /* Bytes */
 #define CODESIZE 128                    /* Bytes */
 #define STACKDIFF 320
-#define SDCARD_SS_PIN 9                 /* RB7 == SELECT_SD_CARD */
+#define SDCARD_SS_PIN PICO_HOME_COMPUTER_CS_SDCARD_PIN                 /* RB7 == SELECT_SD_CARD */
 #endif
 
 #else
@@ -3776,6 +3793,18 @@ object *fn_info (object *args, object *env) {
   return list; 
 }
 
+object *fn_shell (object *args, object *env) {
+  (void) args, (void) env;
+  //char ch = pLispSerial->read();
+  //readcmd()
+  //processcmd()
+
+  // list all files in the card with date and size
+  root.ls(LS_R | LS_DATE | LS_SIZE);
+    
+  return symbol(NOTHING);
+}
+
 // Built-in procedure names - stored in PROGMEM
 
 const char string0[] PROGMEM = "nil";
@@ -3966,6 +3995,8 @@ const char string184[] PROGMEM = "membwrite";
 const char string185[] PROGMEM = "mem-string-read";
 const char string186[] PROGMEM = "mem-string-write";
 const char string187[] PROGMEM = "info";
+const char string188[] PROGMEM = "shell";
+const char string189[] PROGMEM = "cstring";
 
 const tbl_entry_t lookup_table[] PROGMEM = {
   { string0, NULL, 0, 0 },
@@ -4156,6 +4187,8 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string185, fn_memstringread, 2, 2 },
   { string186, fn_memstringwrite, 2, 2 },
   { string187, fn_info, 0, 0 },
+  { string188, fn_shell, 0, 0 },
+  { string189, NULL, 0, 0 },
 };
 
 // Table lookup functions
@@ -4726,7 +4759,7 @@ object *nextitem (gfun_t gfun) {
     }
     error2(0, PSTR("Unknown character"));
   }
-  
+ 
   int x = builtin(buffer);
   if (x == NIL) return nil;
   if (x < ENDFUNCTIONS) return newsymbol(x);
@@ -4871,9 +4904,24 @@ void start_timer_3(uint32_t frequency)
 void setup () {
   rtc.begin();
   SPI.begin();
+#if defined(sdcardsupport)
+  if (card.init(SPI_HALF_SPEED, PICO_HOME_COMPUTER_CS_SDCARD_PIN)) {  
+    if (volume.init(card)) {    
+      root.openRoot(volume);
+    }
+    else
+    {
+      
+    }
+  }
+  else
+  {
+    // set flag to indicate that SD card is not available    
+  }
+#endif
   delay(4000);
-  Serial.begin(115200); // (9600);
-  Serial1.begin(115200);  // for communication with IO Processor (Propeller)
+  Serial.begin(19200); // (115200); // (9600);
+  Serial1.begin(19200); // (115200);  // for communication with IO Processor (Propeller)
   pLispSerial = &Serial1;
   pLispSerialMonitor = &Serial;
   int start = millis();
