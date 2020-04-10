@@ -132,7 +132,7 @@ READFROMSTRING, PRINCTOSTRING, PRIN1TOSTRING, LOGAND, LOGIOR, LOGXOR, LOGNOT, AS
 LOCALS, MAKUNBOUND, BREAK, READ, PRIN1, PRINT, PRINC, TERPRI, READBYTE, READLINE, WRITEBYTE, WRITESTRING,
 WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD, DIGITALWRITE,
 ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY, 
-NOW, SETRTC, MEMBREAD, MEMBWRITE, MEMSTRINGREAD, MEMSTRINGWRITE, INFO, SHELL, CSTRING,
+NOW, SETRTC, MEMBREAD, MEMBWRITE, MEMSTRINGREAD, MEMSTRINGWRITE, INFO, SIMPLESHELL, DIR, CSTRING,
 ENDFUNCTIONS };
 
 // Typedefs
@@ -3796,11 +3796,33 @@ object *fn_info (object *args, object *env) {
   return list; 
 }
 
-object *fn_shell (object *args, object *env) {
-  (void) args, (void) env;
+object *fn_simpleshell (object *args, object *env) {
+  (void) env;
+
   //char ch = pLispSerial->read();
   //readcmd()
   //processcmd()
+
+  object * val = first(args);
+  if( integerp(val) )
+  {
+     int v = val->integer;
+
+     if( v ) 
+     {
+       pfstring(PSTR("\x01#SIMPLESHELL\x01"), pserial);           // \r\n
+     }
+     else
+     {
+       pfstring(PSTR("\x01#NORMALSHELL\x01"), pserial);           // \r\n
+     }
+  }
+    
+  return symbol(NOTHING);
+}
+
+object *fn_dir (object *args, object *env) {
+  (void) args, (void) env;
 
   // list all files in the card with date and size
   root.ls(LS_R | LS_DATE | LS_SIZE);
@@ -3998,8 +4020,9 @@ const char string184[] PROGMEM = "membwrite";
 const char string185[] PROGMEM = "mem-string-read";
 const char string186[] PROGMEM = "mem-string-write";
 const char string187[] PROGMEM = "info";
-const char string188[] PROGMEM = "shell";
-const char string189[] PROGMEM = "cstring";
+const char string188[] PROGMEM = "simpleshell";
+const char string189[] PROGMEM = "dir";
+const char string190[] PROGMEM = "cstring";
 
 const tbl_entry_t lookup_table[] PROGMEM = {
   { string0, NULL, 0, 0 },
@@ -4190,8 +4213,9 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string185, fn_memstringread, 2, 2 },
   { string186, fn_memstringwrite, 2, 2 },
   { string187, fn_info, 0, 0 },
-  { string188, fn_shell, 0, 0 },
-  { string189, NULL, 0, 0 },
+  { string188, fn_simpleshell, 1, 1 },
+  { string189, fn_dir, 0, 0 },
+  { string190, NULL, 0, 0 },
 };
 
 // Table lookup functions
