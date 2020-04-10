@@ -25,6 +25,7 @@ const char LispLibrary[] PROGMEM = "";
 #define SOFT_SPI
 
 #define PICO_HOME_COMPUTER
+#define USE_IO_PROCESSOR
 
 #define PICO_HOME_COMPUTER_CS_SDCARD_PIN    9
 #define PICO_HOME_COMPUTER_CS_SRAM_PIN      5
@@ -64,6 +65,7 @@ SRAMsimple sram;
 #include "libs/SD.h"
 #include "libs/SD.cpp"
 #include "libs/file.cpp"
+#include "libs/utility/SdFat.h"
 #include "libs/utility/SdFile.cpp"
 #include "libs/utility/SdVolume.cpp"
 #include "libs/utility/Sd2Card.cpp"
@@ -213,6 +215,7 @@ int GlobalStringIndex = 0;
 char BreakLevel = 0;
 char LastChar = 0;
 char LastPrint = 0;
+bool InputEcho = true;
 
 // Flags
 enum flag { PRINTREADABLY, RETURNFLAG, ESCAPE, EXITEDITOR, LIBRARYLOADED, NOESC };
@@ -4429,13 +4432,19 @@ void pserial (char c) {
   LastPrint = c;
   if (c == '\n') 
   { 
-    pLispSerial->write('\r');
+    if( InputEcho )
+    {
+      pLispSerial->write('\r');
+    }
     if( pLispSerialMonitor )
     {
       pLispSerialMonitor->write('\r');
     }
   }
-  pLispSerial->write(c);
+  if( InputEcho )
+  {
+    pLispSerial->write(c);
+  }
   if( pLispSerialMonitor )
   {
     pLispSerialMonitor->write(c);
@@ -4901,6 +4910,15 @@ void start_timer_3(uint32_t frequency)
   T3CONSET = T3CON_ENABLE_BIT;            // Turn the timer on
 }
 
+#if defined(sdcardsupport)
+void getCurrentDateTime(uint16_t* _date, uint16_t* _time)
+{
+  DateTime nowValue = rtc.now();
+  *_date = FAT_DATE(nowValue.year(), nowValue.month(), nowValue.day());  
+  *_time = FAT_TIME(nowValue.hour(), nowValue.minute(), nowValue.seconds());
+}
+#endif
+
 void setup () {
   rtc.begin();
   SPI.begin();
@@ -4918,6 +4936,7 @@ void setup () {
   {
     // set flag to indicate that SD card is not available    
   }
+  SdFile::dateTimeCallback(&getCurrentDateTime);
 #endif
   delay(4000);
   Serial.begin(19200); // (115200); // (9600);
@@ -4965,7 +4984,13 @@ void repl (object *env) {
       pint(BreakLevel, pserial);
     }
     pfstring(PSTR("> "), pserial);
+#ifdef USE_IO_PROCESSOR    
+    InputEcho = false;
+#endif    
     object *line = read(gserial);
+#ifdef USE_IO_PROCESSOR    
+    InputEcho = true;
+#endif    
     if (BreakLevel && line == nil) { pln(pserial); return; }
     if (line == (object *)KET) error2(0, PSTR("unmatched right bracket"));
     push(line, GCStack);
