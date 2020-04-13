@@ -10,7 +10,7 @@
 */
 
 // Lisp Library
-const char LispLibrary[] PROGMEM = "";
+const char LispLibrary[] PROGMEM = "(defun evalstr (s) (eval (read-from-string s)))";
 
 // Compile options
 
@@ -132,7 +132,8 @@ READFROMSTRING, PRINCTOSTRING, PRIN1TOSTRING, LOGAND, LOGIOR, LOGXOR, LOGNOT, AS
 LOCALS, MAKUNBOUND, BREAK, READ, PRIN1, PRINT, PRINC, TERPRI, READBYTE, READLINE, WRITEBYTE, WRITESTRING,
 WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD, DIGITALWRITE,
 ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY, 
-NOW, SETRTC, MEMBREAD, MEMBWRITE, MEMSTRINGREAD, MEMSTRINGWRITE, INFO, SIMPLESHELL, DIR, CSTRING,
+NOW, SETRTC, MEMBREAD, MEMBWRITE, MEMSTRINGREAD, MEMSTRINGWRITE, INFO, SIMPLESHELL, DIR, RUN, LOADTEXTFILE, 
+SAVETEXTFILE, CSTRING,
 ENDFUNCTIONS };
 
 // Typedefs
@@ -704,6 +705,56 @@ void autorunimage () {
   }
 #else
   error2(0, PSTR("autorun not available"));
+#endif
+}
+
+object * loadtextfile (object *arg) {
+#if defined(sdcardsupport)
+  SD.begin(SDCARD_SS_PIN);
+  File file;
+  if (stringp(arg)) file = SD.open(MakeFilename(arg));
+  else error(LOADTEXTFILE, PSTR("invalid file name"), arg);
+  if (!file) error2(LOADTEXTFILE, PSTR("problem loading from SD card"));
+  uint32_t fileSize = file.size();
+  char bufText[fileSize+1];
+  int pos = 0;
+  while( pos < fileSize )
+  {
+    bufText[pos] = file.read();
+    ++pos;
+  }
+  bufText[pos] = 0;    
+  file.close();
+  gc(NULL, NULL);
+  object * result = lispstring(bufText);
+  return result;
+#else
+  (void) arg;
+  error2(LOADTEXTFILE, PSTR("not available"));
+  object * result = lispstring("");
+  return result;
+#endif
+}
+
+int savetextfile (object *fileName, object *text) {
+#if defined(sdcardsupport)
+  SD.begin(SDCARD_SS_PIN);
+  File file;
+  if (stringp(fileName)) {
+    file = SD.open(MakeFilename(fileName), O_RDWR | O_CREAT | O_TRUNC);
+  } 
+  else error(SAVETEXTFILE, PSTR("invalid file name"), fileName);
+  if (!file) error2(SAVETEXTFILE, PSTR("problem saving to SD card"));
+  int textLength = stringlength(text);
+  char bufText[textLength+1];
+  cstring(text,(char *)bufText,textLength+1);
+  int lengthWritten = file.write(bufText,textLength);
+  file.close();
+  return lengthWritten;
+#else
+  (void) fileName; (void) text;
+  error2(SAVETEXTFILE, PSTR("not available"));
+  return 0;
 #endif
 }
 
@@ -3830,6 +3881,35 @@ object *fn_dir (object *args, object *env) {
   return symbol(NOTHING);
 }
 
+object *fn_run (object *args, object *env) {
+  (void) env;
+
+  object * val = first(args);
+  if( stringp(val) )
+  {
+    char * fileName = MakeFilename(val);
+    
+    //(save-image "run_temp")
+    //(let (s (read-text-file fileName))
+    //   (evalstr (read-from-string s))
+    // )
+    //(load-image "run_temp")
+  }
+      
+  return symbol(NOTHING);
+}
+
+object *fn_loadtextfile (object *args, object *env) {
+  (void) env;
+  return loadtextfile(first(args));
+}
+
+object *fn_savetextfile (object *args, object *env) {
+  (void) env;
+  int count = savetextfile(first(args), second(args));
+  return number(count);
+}
+    
 // Built-in procedure names - stored in PROGMEM
 
 const char string0[] PROGMEM = "nil";
@@ -4022,7 +4102,10 @@ const char string186[] PROGMEM = "mem-string-write";
 const char string187[] PROGMEM = "info";
 const char string188[] PROGMEM = "simpleshell";
 const char string189[] PROGMEM = "dir";
-const char string190[] PROGMEM = "cstring";
+const char string190[] PROGMEM = "run";
+const char string191[] PROGMEM = "load-text-file";
+const char string192[] PROGMEM = "save-text-file";
+const char string193[] PROGMEM = "cstring";
 
 const tbl_entry_t lookup_table[] PROGMEM = {
   { string0, NULL, 0, 0 },
@@ -4215,7 +4298,10 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string187, fn_info, 0, 0 },
   { string188, fn_simpleshell, 1, 1 },
   { string189, fn_dir, 0, 0 },
-  { string190, NULL, 0, 0 },
+  { string190, fn_run, 1, 1 },  
+  { string191, fn_loadtextfile, 1, 1 },
+  { string192, fn_savetextfile, 2, 2 },
+  { string193, NULL, 0, 0 },
 };
 
 // Table lookup functions
