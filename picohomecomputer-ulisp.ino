@@ -10,7 +10,7 @@
 */
 
 // Lisp Library
-const char LispLibrary[] PROGMEM = "(defun evalstr (s) (eval (read-from-string s)))";
+const char LispLibrary[] PROGMEM = "(defun evalstr (s) (eval (read-from-string s)))\n(defun type (fileName)\n (print (load-text-file fileName))\n (return nothing))";
 
 // Compile options
 
@@ -69,6 +69,8 @@ SRAMsimple sram;
 #include "libs/utility/SdFile.cpp"
 #include "libs/utility/SdVolume.cpp"
 #include "libs/utility/Sd2Card.cpp"
+#include "libs/EdifixEditor.h"
+#include "libs/EdifixEditor.cpp"
 #define SDSIZE 172
 Sd2Card card;
 SdVolume volume;
@@ -133,7 +135,8 @@ LOCALS, MAKUNBOUND, BREAK, READ, PRIN1, PRINT, PRINC, TERPRI, READBYTE, READLINE
 WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD, DIGITALWRITE,
 ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY, 
 NOW, SETRTC, MEMBREAD, MEMBWRITE, MEMSTRINGREAD, MEMSTRINGWRITE, INFO, SIMPLESHELL, DIR, RUN, LOADTEXTFILE, 
-SAVETEXTFILE, CSTRING,
+SAVETEXTFILE, // sd-reject, sd-mount, mkdir, rmdir, cd, del, copy, type, edit, run & pipes (Datenuebergabe), was liefert (eval '(* 5 6))
+EDI, CSTRING,
 ENDFUNCTIONS };
 
 // Typedefs
@@ -3909,7 +3912,374 @@ object *fn_savetextfile (object *args, object *env) {
   int count = savetextfile(first(args), second(args));
   return number(count);
 }
+
+class IOProcessorTerminalImpl : public EdifixEditorTerminalInterface
+{
+    const char ENTER = '\r';
     
+public:
+    IOProcessorTerminalImpl(int cols, int rows);
+
+    virtual int GetScreenWidth() const;
+    virtual int GetScreenHeight() const;
+    virtual void ClearScreen();
+    virtual void SaveScreen();
+    virtual void RestoreScreen();
+    virtual void Write(int col, int row, const char * text, bool eraseToEndOfLine);
+    virtual void SetCursor(int col, int row);
+
+    virtual void SetTerminalModus(bool value);
+    
+    virtual int GetNextEvent();
+    
+private:
+    SimpleString ReadLineFromIOProcessorInTerminalMode();
+    void ProcessEvent(const SimpleString & event);
+
+    bool CursorLeft();
+    bool CursorRight();
+    bool CursorUp();
+    bool CursorDown();
+    void CursorToEndOfText();
+
+    int m_iMaxCols;
+    int m_iMaxRows;
+    int m_iCurrentCursorX;
+    int m_iCurrentCursorY;
+    int m_iVirtualCursorXPos;
+    bool m_bIsInTerminalModus;
+    bool m_bIsVerboseTerminalModus;
+};
+
+IOProcessorTerminalImpl::IOProcessorTerminalImpl(int cols, int rows)
+{
+    m_iMaxCols = cols;
+    m_iMaxRows = rows;
+    m_iCurrentCursorX = 0;
+    m_iCurrentCursorY = 0;
+    m_iVirtualCursorXPos = 0;
+    m_bIsInTerminalModus = false;
+    m_bIsVerboseTerminalModus = false;
+}
+
+int IOProcessorTerminalImpl::GetScreenWidth() const
+{
+    return m_iMaxCols;
+}
+
+int IOProcessorTerminalImpl::GetScreenHeight() const
+{
+    return m_iMaxRows;    
+}
+  
+void IOProcessorTerminalImpl::ClearScreen()
+{
+    pfstring(PSTR("\x01#CLR\x01"), pserial);
+}
+
+void IOProcessorTerminalImpl::SaveScreen()
+{
+    pfstring(PSTR("\x01#SAVESCREEN\x01"), pserial);
+}
+
+void IOProcessorTerminalImpl::RestoreScreen()
+{
+    pfstring(PSTR("\x01#RESTORESCREEN\x01"), pserial);
+}
+
+void IOProcessorTerminalImpl::Write(int col, int row, const char * text, bool eraseToEndOfLine)
+{
+    char buf[16+GetScreenWidth()];
+    if( m_bIsInTerminalModus )
+    {
+        sprintf(buf,"#V:%02d,%02d,%s%c",col,row,text,ENTER);
+    }
+    else
+    {
+        sprintf(buf,"\x01#V:%02d,%02d,%s\x01",col,row,text);
+    }
+    pfstring(buf, pserial);
+    if( eraseToEndOfLine )
+    {
+        int len = strlen(text);
+        int fillLen = m_iMaxCols-col-len+1;
+        char emptyText[fillLen];
+        memset(emptyText,' ',fillLen);
+        emptyText[fillLen] = 0;
+        if( m_bIsInTerminalModus )
+        {
+            sprintf(buf,"#V:%02d,%02d,%s%c",col+len,row,emptyText,ENTER);
+        }
+        else
+        {
+            sprintf(buf,"\x01#V:%02d,%02d,%s\x01",col+len,row,emptyText);          
+        }
+        pfstring(buf, pserial);        
+    }
+}
+
+void IOProcessorTerminalImpl::SetCursor(int col, int row)
+{
+    m_iCurrentCursorX = col;
+    m_iCurrentCursorY = row;
+    m_iVirtualCursorXPos = col;
+    
+    char buf[16];
+    if( m_bIsInTerminalModus )
+    {
+        sprintf(buf,"#V:%02d,%02d,%c",col,row,ENTER);
+    }
+    else
+    {
+        sprintf(buf,"\x01#V:%02d,%02d,\x01",col,row);
+    }
+    pfstring(buf, pserial);  
+}
+
+// reads commands/events for key and mouse from IO Processor in terminal mode
+SimpleString IOProcessorTerminalImpl::ReadLineFromIOProcessorInTerminalMode()
+{
+    SimpleString s;
+    
+    bool bFinish = false;
+    do {
+        while (!pLispSerial->available());
+        char data = pLispSerial->read();
+        pLispSerialMonitor->write(data);
+        
+        if( data == 10 || data == 13 )
+        {
+            bFinish = true;           
+        }
+        else
+        {
+            s.push_back(data);
+        }
+    } while( !bFinish );
+
+    return s;
+}
+
+bool IOProcessorTerminalImpl::CursorLeft()
+{
+    bool ok = true;
+    
+    if( m_iCurrentCursorX-1 >= 0 )
+    {
+        SetCursor(m_iCurrentCursorX-1, m_iCurrentCursorY);
+    }
+    else
+    {
+        if( CursorUp() )
+        {
+            CursorToEndOfText();
+        }
+        else
+        {
+            // Cursor can not move !
+            ok = false;        
+        }           
+    }
+    
+    return ok;
+}
+
+bool IOProcessorTerminalImpl::CursorRight()
+{
+    bool ok = true;
+    
+    if( m_iCurrentCursorX+1 < GetScreenWidth() )
+    {
+        SetCursor(m_iCurrentCursorX+1, m_iCurrentCursorY);
+    }
+    else
+    {
+        if( CursorDown() )
+        {
+            SetCursor(0, m_iCurrentCursorY);
+        }
+        else
+        {
+            // Cursor can not move !
+            ok = false;        
+        }           
+    }
+    
+    return ok;
+}
+
+bool IOProcessorTerminalImpl::CursorUp()
+{
+    bool ok = true;
+    
+    if( m_iCurrentCursorY-1 >= 0 )
+    {
+        SetCursor(m_iCurrentCursorX, m_iCurrentCursorY-1);
+    }
+    else
+    {
+// TODO: not finished
+/*          
+        if( ScrollUp() )
+        {
+            if( m_iCurrentCursorX > LengthOfTextInLine() )
+            {
+                CursorToEndOfText();
+            }
+        }
+        else
+*/            
+        {
+            // Cursor can not move !
+            ok = false;        
+        }           
+    }
+    
+    return ok;
+}
+
+bool IOProcessorTerminalImpl::CursorDown()
+{
+    bool ok = true;
+    
+    if( m_iCurrentCursorY+1 < GetScreenHeight() )
+    {
+        SetCursor(m_iCurrentCursorX, m_iCurrentCursorY+1);
+    }
+    else
+    {
+// TODO: not finished
+/*          
+        if( ScrollUp() )
+        {
+            if( m_iCurrentCursorX > LengthOfTextInLine() )
+            {
+                CursorToEndOfText();
+            }
+        }
+        else
+*/            
+        {
+            // Cursor can not move !
+            ok = false;        
+        }           
+    }
+    
+    return ok;
+}
+
+void IOProcessorTerminalImpl::CursorToEndOfText()
+{
+}
+
+void IOProcessorTerminalImpl::ProcessEvent(const SimpleString & event)
+{
+    const char * cmd = event.c_str();
+    
+    if( strcmp(cmd, "@K:#140") == 0 )  // Left Arrow
+    {
+        CursorLeft();
+    }
+    if( strcmp(cmd, "@K:#141") == 0 )  // Right Arrow
+    {
+        CursorRight();
+    }
+    if( strcmp(cmd, "@K:#142") == 0 )  // Up Arrow
+    {
+        CursorUp();
+    }
+    if( strcmp(cmd, "@K:#143") == 0 )  // Down Arrow
+    {
+        CursorDown();
+    }
+}
+
+void IOProcessorTerminalImpl::SetTerminalModus(bool value)
+{
+    if( !m_bIsInTerminalModus && value )
+    {
+        pfstring(PSTR("\x01#TERMINAL\x01"), pserial);      
+        m_bIsInTerminalModus = true;
+    }
+    else if( !m_bIsInTerminalModus && !value )
+    {
+        pfstring(PSTR("\x01#SHELL\x01"), pserial);      
+        m_bIsInTerminalModus = false;
+    }
+    else if( m_bIsInTerminalModus && value )
+    {
+        pfstring(PSTR("#TERMINAL"), pserial);      
+        if( m_bIsVerboseTerminalModus )
+        {
+            // wait for resoponse: "#OK #TERMINAL"
+            SimpleString s = ReadLineFromIOProcessorInTerminalMode();
+            bool ok = strcmp(s.c_str(), "#OK #TERMINAL") == 0;
+        }
+        m_bIsInTerminalModus = true;
+    }
+    else if( m_bIsInTerminalModus && !value )
+    {
+        pfstring(PSTR("#SHELL"), pserial);      
+        pfl(pserial);
+        if( m_bIsVerboseTerminalModus )
+        {
+            // wait for resoponse: "#OK #SHELL"
+            SimpleString s = ReadLineFromIOProcessorInTerminalMode();
+            bool ok = strcmp(s.c_str(), "#OK #SHELL") == 0;
+        }
+        m_bIsInTerminalModus = false;
+    }
+}
+
+int IOProcessorTerminalImpl::GetNextEvent()
+{
+    int result = 0;
+    
+    bool bFinish = false;
+    do {
+        SimpleString s = ReadLineFromIOProcessorInTerminalMode();
+        
+        ProcessEvent(s);
+        
+        if( strcmp(s.c_str(), "@K:#147") == 0 )  // End key
+        {
+            bFinish = true;
+        }
+    } while( !bFinish );
+    
+    return result;
+}
+
+// idefix/edifix editor ?   
+object *fn_edi (object *args, object *env) {
+  (void) env;
+
+  object * result = nil;
+  object * val = first(args);
+  if( stringp(val) )
+  {
+    char * text = MakeFilename(val);
+
+    //strtok(text,"\n\r");
+
+    // get infos for terminal
+    pfstring(PSTR("\x01#TRIGGERINFOCALLBACK\x01"), pserial); 
+
+    IOProcessorTerminalImpl aTerminal(100, 50);
+    
+    EdifixEditor aEdi(text, &aTerminal);    
+    bool ok = aEdi.Run();
+    if( ok )
+    {
+        result = lispstring((char *)aEdi.GetText().c_str());
+    }
+    
+    //return number(aEdi.GetLineCount());
+  }
+      
+ return result;
+}
+
 // Built-in procedure names - stored in PROGMEM
 
 const char string0[] PROGMEM = "nil";
@@ -4105,7 +4475,8 @@ const char string189[] PROGMEM = "dir";
 const char string190[] PROGMEM = "run";
 const char string191[] PROGMEM = "load-text-file";
 const char string192[] PROGMEM = "save-text-file";
-const char string193[] PROGMEM = "cstring";
+const char string193[] PROGMEM = "edi";
+const char string194[] PROGMEM = "cstring";
 
 const tbl_entry_t lookup_table[] PROGMEM = {
   { string0, NULL, 0, 0 },
@@ -4301,7 +4672,8 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string190, fn_run, 1, 1 },  
   { string191, fn_loadtextfile, 1, 1 },
   { string192, fn_savetextfile, 2, 2 },
-  { string193, NULL, 0, 0 },
+  { string193, fn_edi, 1, 1 },
+  { string194, NULL, 0, 0 },
 };
 
 // Table lookup functions
