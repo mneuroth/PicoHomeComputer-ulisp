@@ -10,7 +10,7 @@
 */
 
 // Lisp Library
-const char LispLibrary[] PROGMEM = "(defun evalstr (s) (eval (read-from-string s)))\n(defun type (fileName)\n (print (load-text-file fileName))\n (return nothing))";
+const char LispLibrary[] PROGMEM = "(defun evalstr (s) (eval (read-from-string s)))\n(defun type (fileName) (print (load-text-file fileName)) nothing)";
 
 // Compile options
 
@@ -3915,7 +3915,8 @@ object *fn_savetextfile (object *args, object *env) {
 
 class IOProcessorTerminalImpl : public EdifixEditorTerminalInterface
 {
-    const char ENTER = '\r';
+    const char CR = '\r';
+    const char LF = '\n';
     
 public:
     IOProcessorTerminalImpl(int cols, int rows);
@@ -3930,18 +3931,18 @@ public:
 
     virtual void SetTerminalModus(bool value);
     
-    virtual int GetNextEvent();
+    virtual EdifixEditorEvent GetNextEvent();
     
 private:
     SimpleString ReadLineFromIOProcessorInTerminalMode();
-    void ProcessEvent(const SimpleString & event);
-
+    //void ProcessEvent(const SimpleString & event);
+/*
     bool CursorLeft();
     bool CursorRight();
     bool CursorUp();
     bool CursorDown();
     void CursorToEndOfText();
-
+*/
     int m_iMaxCols;
     int m_iMaxRows;
     int m_iCurrentCursorX;
@@ -3992,7 +3993,7 @@ void IOProcessorTerminalImpl::Write(int col, int row, const char * text, bool er
     char buf[16+GetScreenWidth()];
     if( m_bIsInTerminalModus )
     {
-        sprintf(buf,"#V:%02d,%02d,%s%c",col,row,text,ENTER);
+        sprintf(buf,"#V:%02d,%02d,%s%c",col,row,text,CR/*,LF*/);
     }
     else
     {
@@ -4008,7 +4009,7 @@ void IOProcessorTerminalImpl::Write(int col, int row, const char * text, bool er
         emptyText[fillLen] = 0;
         if( m_bIsInTerminalModus )
         {
-            sprintf(buf,"#V:%02d,%02d,%s%c",col+len,row,emptyText,ENTER);
+            sprintf(buf,"#V:%02d,%02d,%s%c",col+len,row,emptyText,CR/*,LF*/);
         }
         else
         {
@@ -4027,13 +4028,14 @@ void IOProcessorTerminalImpl::SetCursor(int col, int row)
     char buf[16];
     if( m_bIsInTerminalModus )
     {
-        sprintf(buf,"#V:%02d,%02d,%c",col,row,ENTER);
+        sprintf(buf,"#V:%02d,%02d,%c",col,row,CR/*,LF*/);
     }
     else
     {
         sprintf(buf,"\x01#V:%02d,%02d,\x01",col,row);
     }
     pfstring(buf, pserial);  
+// TODO --> hier debug ausgaben hinzufuegen
 }
 
 // reads commands/events for key and mouse from IO Processor in terminal mode
@@ -4060,6 +4062,7 @@ SimpleString IOProcessorTerminalImpl::ReadLineFromIOProcessorInTerminalMode()
     return s;
 }
 
+#ifdef blub
 bool IOProcessorTerminalImpl::CursorLeft()
 {
     bool ok = true;
@@ -4171,7 +4174,8 @@ bool IOProcessorTerminalImpl::CursorDown()
 void IOProcessorTerminalImpl::CursorToEndOfText()
 {
 }
-
+#endif
+/*
 void IOProcessorTerminalImpl::ProcessEvent(const SimpleString & event)
 {
     const char * cmd = event.c_str();
@@ -4193,9 +4197,11 @@ void IOProcessorTerminalImpl::ProcessEvent(const SimpleString & event)
         CursorDown();
     }
 }
+*/
 
 void IOProcessorTerminalImpl::SetTerminalModus(bool value)
 {
+// TODO --> hier debug ausgaben hinzufuegen
     if( !m_bIsInTerminalModus && value )
     {
         pfstring(PSTR("\x01#TERMINAL\x01"), pserial);      
@@ -4231,23 +4237,40 @@ void IOProcessorTerminalImpl::SetTerminalModus(bool value)
     }
 }
 
-int IOProcessorTerminalImpl::GetNextEvent()
+EdifixEditorEvent IOProcessorTerminalImpl::GetNextEvent()
 {
-    int result = 0;
+    SimpleString s = ReadLineFromIOProcessorInTerminalMode();
     
-    bool bFinish = false;
-    do {
-        SimpleString s = ReadLineFromIOProcessorInTerminalMode();
+    const char * cmd = s.c_str();
+
+    if( strcmp(cmd, "@K:#140") == 0 )  // Left Arrow
+    {
+        return EdifixEditorEvent(ARROW_LEFT);
+    }
+    if( strcmp(cmd, "@K:#141") == 0 )  // Right Arrow
+    {
+        return EdifixEditorEvent(ARROW_RIGHT);
+    }
+    if( strcmp(cmd, "@K:#142") == 0 )  // Up Arrow
+    {
+        return EdifixEditorEvent(ARROW_UP);
+    }
+    if( strcmp(cmd, "@K:#143") == 0 )  // Down Arrow
+    {
+        return EdifixEditorEvent(ARROW_DOWN);
+    }
         
-        ProcessEvent(s);
-        
-        if( strcmp(s.c_str(), "@K:#147") == 0 )  // End key
-        {
-            bFinish = true;
-        }
-    } while( !bFinish );
+    if( strcmp(s.c_str(), "@K:#147") == 0 )  // End key
+    {
+        return EdifixEditorEvent(EdifixEditorEvent::EXIT);
+    }
     
-    return result;
+    if( strncmp(s.c_str(), "@K:", 3) == 0 )  // normal character
+    {
+        return EdifixEditorEvent(s.c_str()[3]);
+    }
+
+    return EdifixEditorEvent();
 }
 
 // idefix/edifix editor ?   
@@ -4917,19 +4940,19 @@ void pserial (char c) {
     if( InputEcho )
     {
       pLispSerial->write('\r');
-    }
-    if( pLispSerialMonitor )
-    {
-      pLispSerialMonitor->write('\r');
+      if( pLispSerialMonitor )
+      {
+        pLispSerialMonitor->write('\r');
+      }
     }
   }
   if( InputEcho )
   {
     pLispSerial->write(c);
-  }
-  if( pLispSerialMonitor )
-  {
-    pLispSerialMonitor->write(c);
+    if( pLispSerialMonitor )
+    {
+      pLispSerialMonitor->write(c);
+    }
   }
 }
 
