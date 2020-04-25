@@ -146,6 +146,9 @@ private:
 
     void CursorToEndOfText();
 
+    // range of iLineNo: 0..m_iCurrentBufferSize-1
+    int GetLengthOfLine(int iLineNo) const;
+    int GetNoOfLines() const;
     
     EdifixEditorTerminalInterface * m_pTerminalInterface;     // not an owner !
 

@@ -425,7 +425,7 @@ bool EdifixEditor::CursorRight()
     
     if( m_pTerminalInterface )
     {
-        if( m_iCurrentCursorX+1 < m_pTerminalInterface->GetScreenWidth() )
+        if( m_iCurrentCursorX+1 < m_pTerminalInterface->GetScreenWidth() && m_iCurrentCursorX+1 < GetLengthOfLine(m_iCurrentCursorY) )
         {
             m_pTerminalInterface->SetCursor(m_iCurrentCursorX+1, m_iCurrentCursorY);
             m_iCurrentCursorX++;
@@ -488,7 +488,7 @@ bool EdifixEditor::CursorDown()
     
     if( m_pTerminalInterface )
     {
-        if( m_iCurrentCursorY+1 < m_pTerminalInterface->GetScreenHeight() )
+        if( m_iCurrentCursorY+1 < m_pTerminalInterface->GetScreenHeight() && m_iCurrentCursorY+1 < GetNoOfLines() )
         {
             m_pTerminalInterface->SetCursor(m_iCurrentCursorX, m_iCurrentCursorY+1);
             m_iCurrentCursorY++;
@@ -518,4 +518,20 @@ bool EdifixEditor::CursorDown()
 
 void EdifixEditor::CursorToEndOfText()
 {
+    m_iCurrentCursorX = GetLengthOfLine(m_iCurrentCursorY);
+}
+
+int EdifixEditor::GetLengthOfLine(int iLineNo) const 
+{
+    if( iLineNo>=0 && iLineNo<GetNoOfLines() )
+    {
+        return strlen(m_pBuffer[iLineNo]);
+    }
+    
+    return -1;
+}
+
+int EdifixEditor::GetNoOfLines() const
+{
+    return m_iNextIndexToAddToBuffer;
 }
