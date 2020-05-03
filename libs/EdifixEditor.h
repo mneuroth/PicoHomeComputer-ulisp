@@ -1,5 +1,5 @@
 /*
-    Edifix Editor, is a very simple Editor intented to run on microcontrollers.
+    Edifix Editor, is a very simple editor intended to run on microcontrollers.
     
     Written by Michael Neuroth for the PicoHomeComputer
     
@@ -13,7 +13,13 @@ const int ARROW_LEFT        = 140;
 const int ARROW_RIGHT       = 141;
 const int ARROW_UP          = 142;
 const int ARROW_DOWN        = 143;
+const int DELETE            = 149;
+const int BACKSPACE         = 8;
+const int ENTER             = 10;
+const int HOME              = 146;
 const int END               = 147;
+const int INSERT            = 148;
+const int FN_1              = 154;
     
 class EdifixEditorEvent
 {
@@ -37,6 +43,7 @@ public:
     bool IsMouse() const { return eventType == MOUSE; }
 
     int GetMetaKey() const { return data.metaKey; }
+    char GetKey() const { return data.key; }
     
     union {
         struct {
@@ -101,6 +108,7 @@ public:
 
     virtual void Write(int col, int row, const char * text, bool eraseToEndOfLine = false) = 0;
     virtual void SetCursor(int col, int row) = 0;
+    virtual void SetInsertCursorModus(bool bIsInsert) = 0;
 
     virtual void SetTerminalModus(bool value) = 0;
 
@@ -134,9 +142,14 @@ private:
 
     void Init();
     void DeInit();
+
     void FillBuffer(const char * text);
     void AddLine(const char * line);
+    void InsertLineAtCursorAndUpdateScreen(const char * line);
 
+    void UpdateScreen();
+    void UpdateCurrentLine(bool bEraseToOfLine = false);
+    void UpdateCursor();
     void DrawTextBlock(int iScreenStartRow, int iNumberOfRows, int iBufferStartPos);
 
     bool CursorLeft();
@@ -144,11 +157,19 @@ private:
     bool CursorUp();
     bool CursorDown();
 
+    void Delete();
     void CursorToEndOfText();
+    void FixCursorForLine(int iLineNo);
 
-    // range of iLineNo: 0..m_iCurrentBufferSize-1
+    void AppendString(const char * text);
+    void InsertCharacterAtCursor(char ch);
+    void DeleteCharacterAtCursor();
+    void RemoveLine(int iLineNo);
+
+    // range of iLineNo: 0..GetLineCount()-1
     int GetLengthOfLine(int iLineNo) const;
-    int GetNoOfLines() const;
+    
+    void IncreaseTextBufferIfNeeded();
     
     EdifixEditorTerminalInterface * m_pTerminalInterface;     // not an owner !
 
@@ -156,11 +177,13 @@ private:
     int       m_iCurrentBufferSize;       // capacity of array of strings
     int       m_iNextIndexToAddToBuffer;  // current index in array of strings to add line into the buffer
 
-    int       m_iMaxCols;
-    int       m_iMaxRows;
+//    int       m_iMaxCols;
+//    int       m_iMaxRows;
     int       m_iCurrentCursorX;
     int       m_iCurrentCursorY;
     int       m_iVirtualCursorXPos;
+    
+    bool      m_bInsertModus;             // insert or overwrite ?
 };
 
 #endif
