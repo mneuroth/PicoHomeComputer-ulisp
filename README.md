@@ -14,7 +14,7 @@ Reference
 All functions of the original uLisp implementation are available, see the [original reference](http://www.ulisp.com/show?3L).
 
 Additional functions to support the hardware of the PicoHomeComputer are:
-* **now_**: returns the current date and time, example: `(now)`
+* **now**: returns the current date and time, example: `(now)`
 * **setrtc**: sets the date and time of the real time clock, example: `(setrtc 2021 5 22 15 53 05)`
 * **membread**: read a byte from the given address of the RAM chip and returns the value, example: `(membread 1234)`
 * **membwrite**: writes a given byte value into the given address of the RAM chip, example: `(membwrite 1234 42)`
