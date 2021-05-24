@@ -10,7 +10,7 @@
 */
 
 // Lisp Library
-const char LispLibrary[] PROGMEM = "(defun evalstr (s) (eval (read-from-string s)))\n(defun type (fileName) (print (load-text-file fileName)) nothing)";
+const char LispLibrary[] PROGMEM = ""; //"(defvar xxx 42)"; //"(defun evalstr (s) (eval (read-from-string s)))\n(defun type (fileName) (print (load-text-file fileName)) nothing)";
 
 // Compile options
 
@@ -177,9 +177,6 @@ DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, FORMAT, REQUIRE, LISTLIBRAR
 DRAWRECT, FILLRECT, DRAWCIRCLE, FILLCIRCLE, DRAWROUNDRECT, FILLROUNDRECT, DRAWTRIANGLE, FILLTRIANGLE,
 DRAWCHAR, SETCURSOR, SETTEXTCOLOR, SETTEXTSIZE, SETTEXTWRAP, FILLSCREEN, SETROTATION, INVERTDISPLAY,
 KEYWORDS, 
-NOW, SETRTC, MEMBREAD, MEMBWRITE, MEMSTRINGREAD, MEMSTRINGWRITE, INFO, SIMPLESHELL, DIR, RUN, LOADTEXTFILE, 
-SAVETEXTFILE, // sd-reject, sd-mount, mkdir, rmdir, cd, del, copy, type, edit, run & pipes (Datenuebergabe), was liefert (eval '(* 5 6))
-EDI, CSTRING,
 K_HIGH, K_LOW,
 #if defined(CPU_ATSAMD21)
 K_INPUT, K_INPUT_PULLUP, K_INPUT_PULLDOWN, K_OUTPUT, K_AR_DEFAULT, K_AR_INTERNAL1V0, K_AR_INTERNAL1V65,
@@ -203,7 +200,11 @@ K_INPUT, K_INPUT_PULLUP, K_OUTPUT, K_DEFAULT, K_EXTERNAL,
 #elif defined(CPU_RP2040)
 K_INPUT, K_INPUT_PULLUP, K_INPUT_PULLDOWN, K_OUTPUT,
 #endif
-USERFUNCTIONS, ENDFUNCTIONS };
+USERFUNCTIONS, 
+NOW, SETRTC, MEMBREAD, MEMBWRITE, MEMSTRINGREAD, MEMSTRINGWRITE, INFO, SIMPLESHELL, DIR, RUN, LOADTEXTFILE, 
+SAVETEXTFILE, // sd-reject, sd-mount, mkdir, rmdir, cd, del, copy, type, edit, run & pipes (Datenuebergabe), was liefert (eval '(* 5 6))
+EDI, CSTRING,
+ENDFUNCTIONS };
 
 // Typedefs
 
@@ -2562,12 +2563,16 @@ object *sp_withspi (object *args, object *env) {
   if (address == 1) spiClass = &SPI1;
   #endif
   spiClass->begin();
-//TODO CHECK PATCH gulp  spiClass->beginTransaction(SPISettings(((unsigned long)clock * 1000), bitorder, mode));
+#ifndef _SOFTSPI_H_
+  spiClass->beginTransaction(SPISettings(((unsigned long)clock * 1000), bitorder, mode));
+#endif
   digitalWrite(pin, LOW);
   object *forms = cdr(args);
   object *result = eval(tf_progn(forms,env), env);
   digitalWrite(pin, HIGH);
-//TODO CHECK PATCH gulp  spiClass->endTransaction();
+#ifndef _SOFTSPI_H_
+  spiClass->endTransaction();
+#endif
   return result;
 }
 
@@ -4603,18 +4608,14 @@ object *fn_invertdisplay (object *args, object *env) {
 
 // see: converting between C and uLisp: http://www.ulisp.com/show?2E0A
 object *lispstring (char *s) {
-  //object *obj = myalloc();
   object *obj = newstring();
-  obj->type = STRING;
   char ch = *s++;
-  object *head = NULL;
   int chars = 0;
   while (ch) {
     if (ch == '\\') ch = *s++;
-//TODO PATCH gulp    buildstring(ch, &chars, &head);
+    buildstring(ch, obj, &chars);
     ch = *s++;
   }
-  obj->cdr = head;
   return obj;
 }
 
@@ -6065,8 +6066,8 @@ int gserial () {
   return '\n';
 #else
   unsigned long start = millis();
-  while (!Serial.available()) if (millis() - start > 1000) clrflag(NOECHO);
-  while (!pLispSerial->available());
+  while (!pLispSerial->available()) if (millis() - start > 1000) clrflag(NOECHO);
+  //while (!pLispSerial->available());
   char temp = pLispSerial->read();
   if (temp != '\n' && !tstflag(NOECHO)) pserial(temp);
   return temp;
@@ -6419,6 +6420,9 @@ void repl (object *env) {
       pint(BreakLevel, pserial);
     }
     pserial('>'); pserial(' ');
+#ifdef USE_IO_PROCESSOR    
+    InputEcho = false;
+#endif    
     object *line = read(gserial);
 #ifdef USE_IO_PROCESSOR    
     InputEcho = true;
