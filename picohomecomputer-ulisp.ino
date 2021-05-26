@@ -10,7 +10,7 @@
 */
 
 // Lisp Library
-const char LispLibrary[] PROGMEM = ""; //"(defvar xxx 42)"; //"(defun evalstr (s) (eval (read-from-string s)))\n(defun type (fileName) (print (load-text-file fileName)) nothing)";
+const char LispLibrary[] PROGMEM = "(defun evalstr (s) (eval (read-from-string s)))\n(defun type (fileName) (print (load-text-file fileName)) nothing)";
 
 // Compile options
 
@@ -203,7 +203,7 @@ K_INPUT, K_INPUT_PULLUP, K_INPUT_PULLDOWN, K_OUTPUT,
 USERFUNCTIONS, 
 NOW, SETRTC, MEMBREAD, MEMBWRITE, MEMSTRINGREAD, MEMSTRINGWRITE, INFO, SIMPLESHELL, DIR, RUN, LOADTEXTFILE, 
 SAVETEXTFILE, // sd-reject, sd-mount, mkdir, rmdir, cd, del, copy, type, edit, run & pipes (Datenuebergabe), was liefert (eval '(* 5 6))
-EDI, CSTRING,
+EDI, //CSTRING,
 ENDFUNCTIONS };
 
 // Typedefs
@@ -4627,7 +4627,7 @@ char *cstring (object *form, char *buffer, int buflen) {
     for (int i=(sizeof(int)-1)*8; i>=0; i=i-8) {
       char ch = chars>>i & 0xFF;
       if (ch) {
-        if (index >= buflen-1) error2(CSTRING, PSTR("no room for string"));
+        if (index >= buflen-1) error2(NULL, PSTR("no room for string"));
         buffer[index++] = ch;
       }
     }
@@ -5143,20 +5143,21 @@ const char string219[] PROGMEM = "";
 
 // Insert your own function names here
 
-const char string220[] PROGMEM = "now";
-const char string221[] PROGMEM = "setrtc";
-const char string222[] PROGMEM = "membread";
-const char string223[] PROGMEM = "membwrite";
-const char string224[] PROGMEM = "mem-string-read";
-const char string225[] PROGMEM = "mem-string-write";
-const char string226[] PROGMEM = "info";
-const char string227[] PROGMEM = "simpleshell";
-const char string228[] PROGMEM = "dir";
-const char string229[] PROGMEM = "run";
-const char string230[] PROGMEM = "load-text-file";
-const char string231[] PROGMEM = "save-text-file";
-const char string232[] PROGMEM = "edi";
-const char string233[] PROGMEM = "cstring";
+const char string240[] PROGMEM = "now";
+const char string241[] PROGMEM = "setrtc";
+const char string242[] PROGMEM = "membread";
+const char string243[] PROGMEM = "membwrite";
+const char string244[] PROGMEM = "mem-string-read";
+const char string245[] PROGMEM = "mem-string-write";
+const char string246[] PROGMEM = "info";
+const char string247[] PROGMEM = "simpleshell";
+const char string248[] PROGMEM = "dir";
+const char string249[] PROGMEM = "run";
+const char string250[] PROGMEM = "load-text-file";
+const char string251[] PROGMEM = "save-text-file";
+const char string252[] PROGMEM = "edi";
+//const char string253[] PROGMEM = "cstring";
+const char string254[] PROGMEM = "";
 
 // Built-in symbol lookup table
 
@@ -5463,20 +5464,22 @@ const tbl_entry_t lookup_table[] PROGMEM = {
 
 // Insert your own table entries here
 
-  { string220, fn_now, 0x00 },
-  { string221, fn_setrtc, 0x66 },
-  { string222, fn_membread, 0x11 },
-  { string223, fn_membwrite, 0x22 },
-  { string224, fn_memstringread, 0x22 },
-  { string225, fn_memstringwrite, 0x22 },
-  { string226, fn_info, 0x00 },
-  { string227, fn_simpleshell, 0x11 },
-  { string228, fn_dir, 0x00 },
-  { string229, fn_run, 0x11 },  
-  { string230, fn_loadtextfile, 0x11 },
-  { string231, fn_savetextfile, 0x22 },
-  { string232, fn_edi, 0x11 },
-  { string233, NULL, 0x00 },
+  { string240, fn_now, 0x00 },
+  { string241, fn_setrtc, 0x66 },
+  { string242, fn_membread, 0x11 },
+  { string243, fn_membwrite, 0x22 },
+  { string244, fn_memstringread, 0x22 },
+  { string245, fn_memstringwrite, 0x22 },
+  { string246, fn_info, 0x00 },
+  { string247, fn_simpleshell, 0x11 },
+  { string248, fn_dir, 0x00 },
+  { string249, fn_run, 0x11 },  
+  { string250, fn_loadtextfile, 0x11 },
+  { string251, fn_savetextfile, 0x22 },
+  { string252, fn_edi, 0x11 },
+  //{ string253, cstring, 0x00 },
+  { string254, NULL, 0x00 },
+  
 };
 
 // Table lookup functions
@@ -5554,10 +5557,11 @@ void testescape () {
 #endif
 
 extern uint32_t ENDSTACK;  // Bottom of stack
-uint8_t End;
+uint32_t End;
 
 object *eval (object *form, object *env) {
   //register int *sp asm ("r13");
+  uint32_t sp[0];
   int TC=0;
   EVAL:
   // Enough space?
@@ -5573,6 +5577,7 @@ object *eval (object *form, object *env) {
     
   // Serial.println((uint32_t)sp - (uint32_t)&ENDSTACK); // Find best STACKDIFF value
   //PATCH: if (((uint32_t)sp - (uint32_t)&End) < STACKDIFF) error2(0, PSTR("stack overflow"));
+  if (((uint32_t)sp - (uint32_t)/*&ENDSTACK*/End) < STACKDIFF) error2(0, PSTR("stack overflow"));
   if (Freespace <= WORKSPACESIZE>>4) gc(form, env);      // GC when 1/16 of workspace left
     
   // Escape
