@@ -21,17 +21,17 @@
 #endif
 
 // for debugging only
-typedef void (*pfun_t)(char);
-void pserial (char c);
-void pfstring (const char *s, pfun_t pfun);
-void pfl (pfun_t pfun);
+//typedef void (*pfun_t)(char);
+//void pserial (char c);
+//void pfstring (const char *s, pfun_t pfun);
+//void pfl (pfun_t pfun);
 
 void test()
 {
     EdifixEditorEvent b('a');
-    b.eventType == EdifixEditorEvent::EventType::KEY;
-    b.data.pos.x;
-    b.data.key;
+    //b.eventType == EdifixEditorEvent::EventType::KEY;
+    //b.data.pos.x;
+    //b.data.key;
 }
 
 // ************************************************************************
@@ -323,13 +323,17 @@ void EdifixEditor::ProcessEvent(const EdifixEditorEvent & event)
             case ENTER:
                 {
                     // copy rest of line into buffer
-                    char buf[strlen(m_pBuffer[m_iCurrentCursorY]+m_iCurrentCursorX)+1];
+                    char * s = m_pBuffer[m_iCurrentCursorY];
+                    s = s + m_iCurrentCursorX;
+                    int m_len = strlen(s);
+                    char * buf = (char *)malloc(m_len+1);
                     strcpy(buf,m_pBuffer[m_iCurrentCursorY]+m_iCurrentCursorX);
                     // remove rest of line from current line (because it will be 'moved' into the next line
                     m_pBuffer[m_iCurrentCursorY][m_iCurrentCursorX] = 0;
                     // insert 'new' line 
                     ++m_iCurrentCursorY;
                     InsertLineAtCursorAndUpdateScreen(buf);
+                    free(buf);
                     // we need the side effect of update screen in InsertLineAtCursorAndUpdateScreen()
                 }
                 break;

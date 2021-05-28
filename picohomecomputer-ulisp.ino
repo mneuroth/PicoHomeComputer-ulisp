@@ -9,6 +9,10 @@
    Licensed under the MIT license: https://opensource.org/licenses/MIT
 */
 
+#ifdef DESKTOP
+#include <desktop.h>
+#endif
+
 // Lisp Library
 const char LispLibrary[] PROGMEM = "(defun evalstr (s) (eval (read-from-string s)))\n(defun type (fileName) (print (load-text-file fileName)) nothing)";
 
@@ -23,6 +27,10 @@ const char LispLibrary[] PROGMEM = "(defun evalstr (s) (eval (read-from-string s
 //#define assemblerlist
 // #define lineeditor
 // #define vt100
+
+#ifdef DESKTOP
+#undef sdcardsupport
+#endif
 
 #define SOFT_SPI
 
@@ -53,9 +61,11 @@ SoftSPI SPI(/*CHIP_SELECT*/PICO_HOME_COMPUTER_CS_SRAM_PIN,MOSI,MISO,SCK);  // TO
 #include <limits.h>
 
 #include "libs/RTClib.h"
-#include "libs/RTClib.cpp"
 #include "libs/SRAMsimple.h"
+#ifndef DESKTOP
+#include "libs/RTClib.cpp"
 #include "libs/SRAMsimple.cpp"
+#endif
 
 HardwareSerial * pLispSerial;
 HardwareSerial * pLispSerialMonitor;
@@ -87,9 +97,6 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RS
 #include "libs/utility/SdFile.cpp"
 #include "libs/utility/SdVolume.cpp"
 #include "libs/utility/Sd2Card.cpp"
-#include "libs/EdifixEditor.h"
-#include "libs/EdifixEditor.cpp"
-#include "libs/IOProcessorTerminal.cpp"
 #define SDSIZE 172
 Sd2Card card;
 SdVolume volume;
@@ -261,10 +268,49 @@ typedef int BitOrder;
 #define STACKDIFF 320
 #define SDCARD_SS_PIN PICO_HOME_COMPUTER_CS_SDCARD_PIN                 /* RB7 == SELECT_SD_CARD */
 #endif
+#if defined(DESKTOP)
+#define PSTR(s) s
+#define PROGMEM
+#define WORKSPACESIZE /*3072*/4096-SDSIZE       /* Cells (8*bytes) */
+#define SYMBOLTABLESIZE 512             /* Bytes */
+#define CODESIZE 128                    /* Bytes */
+#define STACKDIFF 320
+#define SDCARD_SS_PIN PICO_HOME_COMPUTER_CS_SDCARD_PIN                 /* RB7 == SELECT_SD_CARD */
+
+void pfl (pfun_t pfun);
+void pfstring (const char *s, pfun_t pfun);
+char *symbolname (symbol_t x);
+void pstring (char *s, pfun_t pfun);
+void pln (pfun_t pfun);
+int maxbuffer (char *buffer);
+uint8_t nthchar (object *string, int n);
+object *lispstring (char *s);
+void checkminmax (symbol_t name, int nargs);
+//char *lookupbuiltin (symbol_t name);
+char *lookupsymbol (symbol_t name);
+uint8_t getminmax (symbol_t name);
+void pint (int i, pfun_t pfun);
+int listlength (symbol_t name, object *list);
+void testescape ();
+int gserial ();
+void pintbase (uint32_t i, uint8_t power2, pfun_t pfun);
+int subwidthlist (object *form, int w);
+void supersub (object *form, int lm, int super, pfun_t pfun);
+void prin1object (object *form, pfun_t pfun);
+void printstring (object *form, pfun_t pfun);
+object *edit (object *fun);
+int glibrary ();
+void pserial (char c);
+
+#endif
 
 #else
 #error This sketch is intended for the PIC32 platform !
 #endif
+
+#include "libs/EdifixEditor.h"
+#include "libs/EdifixEditor.cpp"
+#include "libs/IOProcessorTerminal.cpp"
 
 object Workspace[WORKSPACESIZE] WORDALIGNED MEMBANK;
 char SymbolTable[SYMBOLTABLESIZE];
@@ -4774,8 +4820,10 @@ object *fn_simpleshell (object *args, object *env) {
 object *fn_dir (object *args, object *env) {
   (void) args, (void) env;
 
+#if defined(sdcardsupport)
   // list all files in the card with date and size
   root.ls(LS_R | LS_DATE | LS_SIZE);
+#endif
     
   return symbol(NOTHING);
 }
@@ -5160,7 +5208,7 @@ const char string252[] PROGMEM = "edi";
 const char string254[] PROGMEM = "";
 
 // Built-in symbol lookup table
-
+// Third parameter is no. of arguments; 1st hex digit is min, 2nd hex digit is max, 0xF is unlimited
 const tbl_entry_t lookup_table[] PROGMEM = {
   { string0, NULL, 0x00 },
   { string1, NULL, 0x00 },
@@ -5577,7 +5625,7 @@ object *eval (object *form, object *env) {
     
   // Serial.println((uint32_t)sp - (uint32_t)&ENDSTACK); // Find best STACKDIFF value
   //PATCH: if (((uint32_t)sp - (uint32_t)&End) < STACKDIFF) error2(0, PSTR("stack overflow"));
-  if (((uint32_t)sp - (uint32_t)/*&ENDSTACK*/End) < STACKDIFF) error2(0, PSTR("stack overflow"));
+//  if (((uint32_t)sp - (uint32_t)/*&ENDSTACK*/End) < STACKDIFF) error2(0, PSTR("stack overflow"));
   if (Freespace <= WORKSPACESIZE>>4) gc(form, env);      // GC when 1/16 of workspace left
     
   // Escape
@@ -6301,6 +6349,7 @@ volatile uint32_t count = 0;
 volatile unsigned int flag = 0;
 int mask = 0; // This isn't used as a mask, but I can't bother to come up with a better name.
 
+#ifndef DESKTOP
 // see: https://www.instructables.com/id/Timer-Interrupts-on-the-DP32/ 
 /********************************
    ISR
@@ -6315,6 +6364,7 @@ void __attribute__((interrupt)) blinkISR()
   }
   clearIntFlag(_TIMER_3_IRQ);
 }
+#endif
 
 // see: https://chipkit.net/wiki/index.php?title=Task_Manager
 void blink_task(int id, void * tptr) 
@@ -6322,6 +6372,7 @@ void blink_task(int id, void * tptr)
    digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Toggle pin state
 }
 
+#ifndef DESKTOP
 /********************************
    Timer and interrupt setup function
  ********************************/
@@ -6349,6 +6400,7 @@ void start_timer_3(uint32_t frequency)
   PR3 = period;                           // Set the period
   T3CONSET = T3CON_ENABLE_BIT;            // Turn the timer on
 }
+#endif
 
 #if defined(sdcardsupport)
 void getCurrentDateTime(uint16_t* _date, uint16_t* _time)
@@ -6395,6 +6447,7 @@ void setup () {
   // the chipKIT task library works only if the loop() function is not blocked !
   //blink_id = createTask(blink_task, 500, TASK_ENABLE, &blink_var);  
   
+#ifndef DESKTOP
   // Start our timer with the given frequency
   start_timer_3(INT_FREQUENCY); // The definition of this function is above
   // Set our interrupt service routine to the blinkISR function above
@@ -6405,7 +6458,8 @@ void setup () {
   clearIntFlag(_TIMER_3_IRQ);
   // Enable our interrupt so it can run!
   setIntEnable(_TIMER_3_IRQ);
-  
+#endif
+
   pln(pserial); 
   initgfx();
   pfstring(PSTR("uLisp 3.6 "), pserial); pln(pserial);
