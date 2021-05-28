@@ -4707,14 +4707,14 @@ object *fn_now (object *args, object *env) {
 #else
   time_t t = time(NULL);
   struct tm tm = *localtime(&t);
-  object* yearVal = number(tm.tm_year);
-  object* monthVal = number(tm.tm_mon);
+  object* yearVal = number(tm.tm_year+1900);
+  object* monthVal = number(tm.tm_mon+1);
   object* dayVal = number(tm.tm_mday);
   object* hourVal = number(tm.tm_hour);
   object* minuteVal = number(tm.tm_min);
   object* secondVal = number(tm.tm_sec);
   object* list = cons(yearVal, cons(monthVal, cons(dayVal, cons(hourVal, cons(minuteVal, cons(secondVal, nil))))));
-  return nil;
+  return list;
 #endif
 }
 
