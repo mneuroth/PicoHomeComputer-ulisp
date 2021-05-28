@@ -30,7 +30,7 @@ const char LispLibrary[] PROGMEM = "(defun evalstr (s) (eval (read-from-string s
 
 #ifdef DESKTOP
 #undef sdcardsupport
-#include <Arduino.h>
+#include <ArduinoDesktop.h>
 #endif
 
 #define SOFT_SPI
@@ -280,6 +280,11 @@ typedef int BitOrder;
 #define CODESIZE 128                    /* Bytes */
 #define STACKDIFF 320
 #define SDCARD_SS_PIN PICO_HOME_COMPUTER_CS_SDCARD_PIN                 /* RB7 == SELECT_SD_CARD */
+#endif
+
+#else
+#error This sketch is intended for the PIC32 platform !
+#endif
 
 void pfl (pfun_t pfun);
 void pfstring (const char *s, pfun_t pfun);
@@ -305,12 +310,6 @@ void printstring (object *form, pfun_t pfun);
 object *edit (object *fun);
 int glibrary ();
 void pserial (char c);
-
-#endif
-
-#else
-#error This sketch is intended for the PIC32 platform !
-#endif
 
 #include "libs/EdifixEditor.h"
 #include "libs/EdifixEditor.cpp"
