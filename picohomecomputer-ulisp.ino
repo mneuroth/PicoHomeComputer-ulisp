@@ -30,6 +30,7 @@ const char LispLibrary[] PROGMEM = "(defun evalstr (s) (eval (read-from-string s
 
 #ifdef DESKTOP
 #undef sdcardsupport
+#include <Arduino.h>
 #endif
 
 #define SOFT_SPI
@@ -60,9 +61,9 @@ SoftSPI SPI(/*CHIP_SELECT*/PICO_HOME_COMPUTER_CS_SRAM_PIN,MOSI,MISO,SCK);  // TO
 #include <Wire.h>
 #include <limits.h>
 
+#ifndef DESKTOP
 #include "libs/RTClib.h"
 #include "libs/SRAMsimple.h"
-#ifndef DESKTOP
 #include "libs/RTClib.cpp"
 #include "libs/SRAMsimple.cpp"
 #endif
@@ -70,8 +71,10 @@ SoftSPI SPI(/*CHIP_SELECT*/PICO_HOME_COMPUTER_CS_SRAM_PIN,MOSI,MISO,SCK);  // TO
 HardwareSerial * pLispSerial;
 HardwareSerial * pLispSerialMonitor;
 
+#ifndef DESKTOP
 RTC_DS1307 rtc;
 SRAMsimple sram;
+#endif
 
 #if defined(gfxsupport)
 #include <Adafruit_GFX.h>    // Core graphics library
@@ -107,10 +110,17 @@ SdFile root;
 
 // Platform specific settings
 
+#ifdef DESKTOP
+#define WORDALIGNED 
+#define BUFFERSIZE 34  // Number of bits+2
+#define RAMFUNC 
+#define MEMBANK
+#else
 #define WORDALIGNED __attribute__((aligned (4)))
 #define BUFFERSIZE 34  // Number of bits+2
 #define RAMFUNC __attribute__ ((section (".ramfunctions")))
 #define MEMBANK
+#endif
 
 // C Macros
 
@@ -248,12 +258,6 @@ typedef struct {
 typedef int (*gfun_t)();
 typedef void (*pfun_t)(char);
 //typedef int PinMode;
-
-// Workspace
-#define PERSIST __attribute__((section(".text")))
-#define WORDALIGNED __attribute__((aligned (4)))
-#define BUFFERSIZE 34  // Number of bits+2
-#define RAMFUNC __attribute__ ((section (".ramfunctions")))
 
 #if defined(ARDUINO_ARCH_PIC32)
 
@@ -1039,7 +1043,8 @@ object * loadtextfile (object *arg) {
 #else
   (void) arg;
   error2(LOADTEXTFILE, PSTR("not available"));
-  object * result = lispstring("");
+  char empty[] = "";
+  object * result = lispstring(empty);
   return result;
 #endif
 }
@@ -1573,7 +1578,7 @@ object *closure (int tc, symbol_t name, object *state, object *function, object 
   // Add arguments to environment
   bool optional = false;
   while (params != NULL) {
-    object *value;
+    object *value = NULL;
     object *var = first(params);
     if (symbolp(var) && var->name == OPTIONAL) optional = true;
     else {
@@ -2726,7 +2731,7 @@ object *sp_defcode (object *args, object *env) {
   
   // Compact the code block, removing gaps
   origin = 0;
-  object *block;
+  object *block = NULL;
   int smallest;
 
   do {
@@ -3109,7 +3114,7 @@ object *fn_funcall (object *args, object *env) {
 object *fn_append (object *args, object *env) {
   (void) env;
   object *head = NULL;
-  object *tail;
+  object *tail = NULL;
   while (args != NULL) {
     object *list = first(args);
     if (!listp(list)) error(APPEND, notalist, list);
@@ -3397,10 +3402,10 @@ object *fn_oneminus (object *args, object *env) {
 object *fn_abs (object *args, object *env) {
   (void) env;
   object *arg = first(args);
-  if (floatp(arg)) return makefloat(abs(arg->single_float));
+  if (floatp(arg)) return makefloat(fabs(arg->single_float));
   else if (integerp(arg)) {
     int result = arg->integer;
-    if (result == INT_MIN) return makefloat(abs((float)result));
+    if (result == INT_MIN) return makefloat(fabs((float)result));
     else return number(abs(result));
   } else error(ABS, notanumber, arg);
   return nil;
@@ -3685,8 +3690,8 @@ object *fn_expt (object *args, object *env) {
   (void) env;
   object *arg1 = first(args); object *arg2 = second(args);
   float float1 = checkintfloat(EXPT, arg1);
-  float value = log(abs(float1)) * checkintfloat(EXPT, arg2);
-  if (integerp(arg1) && integerp(arg2) && ((arg2->integer) > 0) && (abs(value) < 21.4875))
+  float value = log(fabs(float1)) * checkintfloat(EXPT, arg2);
+  if (integerp(arg1) && integerp(arg2) && ((arg2->integer) > 0) && (fabs(value) < 21.4875))
     return number(intpower(arg1->integer, arg2->integer));
   if (float1 < 0) {
     if (integerp(arg2)) return makefloat((arg2->integer & 1) ? -exp(value) : exp(value));
@@ -4099,7 +4104,7 @@ object *fn_restarti2c (object *args, object *env) {
   }
   int address = stream & 0xFF;
   if (stream>>8 != I2CSTREAM) error2(RESTARTI2C, PSTR("not an i2c stream"));
-  TwoWire *port;
+  TwoWire *port = NULL;
   if (address < 128) port = &Wire;
   #if defined(ARDUINO_BBC_MICROBIT_V2) || defined(ARDUINO_TEENSY40) || defined(ARDUINO_TEENSY41) || defined(MAX32620)
   else port = &Wire1;
@@ -4347,7 +4352,7 @@ object *fn_format (object *args, object *env) {
   (void) env;
   pfun_t pfun = pserial;
   object *output = first(args);
-  object *obj;
+  object *obj = NULL;
   if (output == nil) { obj = startstring(FORMAT); pfun = pstr; }
   else if (output != tee) pfun = pstreamfun(args);
   object *formatstr = second(args);
@@ -4468,8 +4473,8 @@ object *fn_drawpixel (object *args, object *env) {
   uint16_t colour = COLOR_WHITE;
   if (cddr(args) != NULL) colour = checkinteger(DRAWPIXEL, third(args));
   tft.drawPixel(checkinteger(DRAWPIXEL, first(args)), checkinteger(DRAWPIXEL, second(args)), colour);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_drawline (object *args, object *env) {
@@ -4479,8 +4484,8 @@ object *fn_drawline (object *args, object *env) {
   for (int i=0; i<4; i++) { params[i] = checkinteger(DRAWLINE, car(args)); args = cdr(args); }
   if (args != NULL) colour = checkinteger(DRAWLINE, car(args));
   tft.drawLine(params[0], params[1], params[2], params[3], colour);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_drawrect (object *args, object *env) {
@@ -4490,8 +4495,8 @@ object *fn_drawrect (object *args, object *env) {
   for (int i=0; i<4; i++) { params[i] = checkinteger(DRAWRECT, car(args)); args = cdr(args); }
   if (args != NULL) colour = checkinteger(DRAWRECT, car(args));
   tft.drawRect(params[0], params[1], params[2], params[3], colour);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_fillrect (object *args, object *env) {
@@ -4501,8 +4506,8 @@ object *fn_fillrect (object *args, object *env) {
   for (int i=0; i<4; i++) { params[i] = checkinteger(FILLRECT, car(args)); args = cdr(args); }
   if (args != NULL) colour = checkinteger(FILLRECT, car(args));
   tft.fillRect(params[0], params[1], params[2], params[3], colour);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_drawcircle (object *args, object *env) {
@@ -4512,8 +4517,8 @@ object *fn_drawcircle (object *args, object *env) {
   for (int i=0; i<3; i++) { params[i] = checkinteger(DRAWCIRCLE, car(args)); args = cdr(args); }
   if (args != NULL) colour = checkinteger(DRAWCIRCLE, car(args));
   tft.drawCircle(params[0], params[1], params[2], colour);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_fillcircle (object *args, object *env) {
@@ -4523,8 +4528,8 @@ object *fn_fillcircle (object *args, object *env) {
   for (int i=0; i<3; i++) { params[i] = checkinteger(FILLCIRCLE, car(args)); args = cdr(args); }
   if (args != NULL) colour = checkinteger(FILLCIRCLE, car(args));
   tft.fillCircle(params[0], params[1], params[2], colour);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_drawroundrect (object *args, object *env) {
@@ -4534,8 +4539,8 @@ object *fn_drawroundrect (object *args, object *env) {
   for (int i=0; i<5; i++) { params[i] = checkinteger(DRAWROUNDRECT, car(args)); args = cdr(args); }
   if (args != NULL) colour = checkinteger(DRAWROUNDRECT, car(args));
   tft.drawRoundRect(params[0], params[1], params[2], params[3], params[4], colour);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_fillroundrect (object *args, object *env) {
@@ -4545,8 +4550,8 @@ object *fn_fillroundrect (object *args, object *env) {
   for (int i=0; i<5; i++) { params[i] = checkinteger(FILLROUNDRECT, car(args)); args = cdr(args); }
   if (args != NULL) colour = checkinteger(FILLROUNDRECT, car(args));
   tft.fillRoundRect(params[0], params[1], params[2], params[3], params[4], colour);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_drawtriangle (object *args, object *env) {
@@ -4556,8 +4561,8 @@ object *fn_drawtriangle (object *args, object *env) {
   for (int i=0; i<6; i++) { params[i] = checkinteger(DRAWTRIANGLE, car(args)); args = cdr(args); }
   if (args != NULL) colour = checkinteger(DRAWTRIANGLE, car(args));
   tft.drawTriangle(params[0], params[1], params[2], params[3], params[4], params[5], colour);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_filltriangle (object *args, object *env) {
@@ -4567,8 +4572,8 @@ object *fn_filltriangle (object *args, object *env) {
   for (int i=0; i<6; i++) { params[i] = checkinteger(FILLTRIANGLE, car(args)); args = cdr(args); }
   if (args != NULL) colour = checkinteger(FILLTRIANGLE, car(args));
   tft.fillTriangle(params[0], params[1], params[2], params[3], params[4], params[5], colour);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_drawchar (object *args, object *env) {
@@ -4587,16 +4592,16 @@ object *fn_drawchar (object *args, object *env) {
   }
   tft.drawChar(checkinteger(DRAWCHAR, first(args)), checkinteger(DRAWCHAR, second(args)), checkchar(DRAWCHAR, third(args)),
     colour, bg, size);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_setcursor (object *args, object *env) {
   #if defined(gfxsupport)
   (void) env;
   tft.setCursor(checkinteger(SETCURSOR, first(args)), checkinteger(SETCURSOR, second(args)));
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_settextcolor (object *args, object *env) {
@@ -4604,24 +4609,24 @@ object *fn_settextcolor (object *args, object *env) {
   (void) env;
   if (cdr(args) != NULL) tft.setTextColor(checkinteger(SETTEXTCOLOR, first(args)), checkinteger(SETTEXTCOLOR, second(args)));
   else tft.setTextColor(checkinteger(SETTEXTCOLOR, first(args)));
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_settextsize (object *args, object *env) {
   #if defined(gfxsupport)
   (void) env;
   tft.setTextSize(checkinteger(SETTEXTSIZE, first(args)));
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_settextwrap (object *args, object *env) {
   #if defined(gfxsupport)
   (void) env;
   tft.setTextWrap(first(args) != NULL);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_fillscreen (object *args, object *env) {
@@ -4630,24 +4635,24 @@ object *fn_fillscreen (object *args, object *env) {
   uint16_t colour = COLOR_BLACK;
   if (args != NULL) colour = checkinteger(FILLSCREEN, first(args));
   tft.fillScreen(colour);
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_setrotation (object *args, object *env) {
   #if defined(gfxsupport)
   (void) env;
   tft.setRotation(checkinteger(SETROTATION, first(args)));
-  return nil;
   #endif
+  return nil;
 }
 
 object *fn_invertdisplay (object *args, object *env) {
   #if defined(gfxsupport)
   (void) env;
   tft.invertDisplay(first(args) != NULL);
-  return nil;
   #endif
+  return nil;
 }
 
 // Insert your own function definitions here
@@ -4690,6 +4695,7 @@ char *cstringbuf (object *arg) {
 
 object *fn_now (object *args, object *env) {
   (void) args, (void) env;
+#ifndef DESKTOP    
   DateTime nowValue = rtc.now();
   object *yearVal = number(nowValue.year());
   object *monthVal = number(nowValue.month());
@@ -4698,7 +4704,19 @@ object *fn_now (object *args, object *env) {
   object *minuteVal = number(nowValue.minute());
   object *secondVal = number(nowValue.seconds());
   object *list = cons(yearVal,cons(monthVal,cons(dayVal,cons(hourVal,cons(minuteVal,cons(secondVal,nil))))));
-  return list; 
+  return list;
+#else
+  time_t t = time(NULL);
+  struct tm tm = *localtime(&t);
+  object* yearVal = number(tm.tm_year);
+  object* monthVal = number(tm.tm_mon);
+  object* dayVal = number(tm.tm_mday);
+  object* hourVal = number(tm.tm_hour);
+  object* minuteVal = number(tm.tm_min);
+  object* secondVal = number(tm.tm_sec);
+  object* list = cons(yearVal, cons(monthVal, cons(dayVal, cons(hourVal, cons(minuteVal, cons(secondVal, nil))))));
+  return nil;
+#endif
 }
 
 object *fn_setrtc (object *args, object *env) {
@@ -4722,17 +4740,27 @@ object *fn_setrtc (object *args, object *env) {
   val = car(args);
   secondVal = val->integer;
   args = cdr(args);
+#ifndef DESKTOP    
   DateTime newValue(yearVal, monthVal, dayVal, hourVal, minuteVal, secondVal);
   rtc.adjust(newValue);
+#else
+  // not supported for destop environment
+#endif
   return symbol(NOTHING);
 }
+
+byte m_aMemory[1024*1024];
 
 // (membread index)
 object *fn_membread (object *args, object *env) {
   (void) env;
   object * val = car(args);
   uint32_t addrVal = (uint32_t)val->integer;
+#ifndef DESKTOP    
   byte retVal = sram.ReadByte(addrVal);
+#else
+  byte retVal = m_aMemory[addrVal];
+#endif
   return number((int)retVal);
 }
 
@@ -4744,7 +4772,11 @@ object *fn_membwrite (object *args, object *env) {
   args = cdr(args);
   val = car(args);
   byte valVal = (byte)val->integer;
+#ifndef DESKTOP    
   sram.WriteByte(addrVal, valVal);
+#else
+  m_aMemory[addrVal] = valVal;
+#endif    
   return number((int)valVal);;
 }
 
@@ -4754,12 +4786,19 @@ object *fn_memstringread (object *args, object *env) {
   object * val = first(args);
   uint32_t addrVal = (uint32_t)val->integer;
   val = second(args);
-  uint32_t sizeVal = (uint32_t)val->integer;
+  const uint32_t sizeVal = (uint32_t)val->integer;
+#ifndef DESKTOP
   byte sBuffer[sizeVal+1];
   sram.ReadByteArray(addrVal,sBuffer,sizeVal);
   sBuffer[sizeVal] = 0;
+#else
+  char sBuffer[4096];
+  strncpy(sBuffer, (char *)&(m_aMemory[addrVal]), sizeVal);
+  sBuffer[addrVal + sizeVal] = 0;
+#endif
   object * result = lispstring((char *)sBuffer);
   return result;
+  return 0;
 }
 
 // (mem-string-write index s)
@@ -4772,7 +4811,12 @@ object *fn_memstringwrite (object *args, object *env) {
   {
     char * s = cstringbuf(val);
     int sizeVal = strlen(s);
+#ifndef DESKTOP    
     sram.WriteByteArray(addrVal,(byte *)s,sizeVal);
+#else
+    strncpy((char*)&(m_aMemory[addrVal]), s, sizeVal);
+    m_aMemory[addrVal + sizeVal] = 0;
+#endif      
     return tee;
   }
   return nil;
@@ -5593,7 +5637,11 @@ void deletesymbol (symbol_t name) {
 }
 
 void testescape () {
-  if (pLispSerial->read() == '~') error2(0, PSTR("escape!"));
+#ifdef DESKTOP
+  if (pLispSerial->read(true) == '~') error2(0, PSTR("escape!"));
+#else
+    if (pLispSerial->read() == '~') error2(0, PSTR("escape!"));
+#endif
 }
 
 // Main evaluator
@@ -5609,7 +5657,9 @@ uint32_t End;
 
 object *eval (object *form, object *env) {
   //register int *sp asm ("r13");
+#ifndef DESKTOP
   uint32_t sp[0];
+#endif
   int TC=0;
   EVAL:
   // Enough space?
@@ -6023,7 +6073,10 @@ volatile uint8_t KybdAvailable = 0;
 
 // Parenthesis highlighting
 void esc (int p, char c) {
-  Serial.write('\e'); Serial.write('[');
+#ifndef DESTOP
+  Serial.write('\e'); 
+#endif
+  Serial.write('[');
   Serial.write((char)('0'+ p/100));
   Serial.write((char)('0'+ (p/10) % 10));
   Serial.write((char)('0'+ p % 10));
@@ -6031,7 +6084,10 @@ void esc (int p, char c) {
 }
 
 void hilight (char c) {
-  Serial.write('\e'); Serial.write('['); Serial.write(c); Serial.write('m');
+#ifndef DESTOP
+  Serial.write('\e');
+#endif
+  Serial.write('['); Serial.write(c); Serial.write('m');
 }
 
 void Highlight (int p, int wp, uint8_t invert) {
@@ -6412,7 +6468,9 @@ void getCurrentDateTime(uint16_t* _date, uint16_t* _time)
 #endif
 
 void setup () {
+#ifndef DESKTOP    
   rtc.begin();
+#endif
   SPI.begin();
 #if defined(sdcardsupport)
   if (card.init(SPI_HALF_SPEED, PICO_HOME_COMPUTER_CS_SDCARD_PIN)) {  
@@ -6434,7 +6492,9 @@ void setup () {
   Serial.begin(19200); // (115200); // (9600);
   Serial1.begin(19200); // (115200);  // for communication with IO Processor (Propeller)
   pLispSerial = &Serial1;
+#ifndef DESKTOP
   pLispSerialMonitor = &Serial;
+#endif
   int start = millis();
   while ((millis() - start) < 5000) { if (*pLispSerial) break; }
   initworkspace();
@@ -6521,3 +6581,13 @@ void loop () {
   #endif
   repl(NULL);
 }
+
+#ifdef DESKTOP
+int main()
+{
+    setup();
+    while(true) {
+        loop();
+    }
+}
+#endif
