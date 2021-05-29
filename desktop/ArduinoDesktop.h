@@ -5,15 +5,61 @@
 #include <string.h>
 #include <time.h>
 
+#include <cstdint>
+
 #ifdef _MSC_VER 
 #include <conio.h>
 //not #if defined(_WIN32) || defined(_WIN64) because we have strncasecmp in mingw
 #define strncasecmp _strnicmp
 #define strcasecmp _stricmp
 #else
-bool _kbhit() { return true; }
-char _getch() { return 0; }
-void _putch(char)  {}
+
+#include <sys/ioctl.h>
+#include <termios.h>
+
+bool _kbhit()
+{
+    termios term;
+    tcgetattr(0, &term);
+
+    termios term2 = term;
+    term2.c_lflag &= ~ICANON;
+    tcsetattr(0, TCSANOW, &term2);
+
+    int byteswaiting;
+    ioctl(0, FIONREAD, &byteswaiting);
+
+    tcsetattr(0, TCSANOW, &term);
+
+    return byteswaiting > 0;
+}
+
+char _getch(void)
+{
+    char buf = 0;
+    struct termios old = { 0 };
+    fflush(stdout);
+    if (tcgetattr(0, &old) < 0)
+        perror("tcsetattr()");
+    old.c_lflag &= ~ICANON;
+    old.c_lflag &= ~ECHO;
+    old.c_cc[VMIN] = 1;
+    old.c_cc[VTIME] = 0;
+    if (tcsetattr(0, TCSANOW, &old) < 0)
+        perror("tcsetattr ICANON");
+    if (read(0, &buf, 1) < 0)
+        perror("read()");
+    old.c_lflag |= ICANON;
+    old.c_lflag |= ECHO;
+    if (tcsetattr(0, TCSADRAIN, &old) < 0)
+        perror("tcsetattr ~ICANON");
+    //printf("%c\n", buf);
+    return buf;
+ }
+
+//char _getch() { return getch(); }
+//void _putch(char) { putch();  }
+
 #endif
 
 #define HIGH 1
@@ -40,19 +86,6 @@ int TMR3;
 int T3CON;
 int PR3;
 int T3CONSET;
-
-#ifndef __linux__
-typedef unsigned char uint8_t;
-typedef unsigned short uint16_t;
-typedef unsigned int uint32_t;
-
-typedef char int8_t;
-typedef short int16_t;
-typedef int int32_t;
-typedef long int64_t;
-#else
-#include <cstdint>
-#endif
 
 typedef unsigned char byte;
 
@@ -126,7 +159,7 @@ public:
         }
         //printf("getc() ");
         char ch = _getch();
-        _putch(ch);
+        putc(ch,stdout);
         return ch;
         /*
         if( !isBufferEmpty() )
