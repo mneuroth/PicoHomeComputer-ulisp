@@ -14,6 +14,7 @@
 #define strcasecmp _stricmp
 #else
 
+#include <unistd.h>
 #include <sys/ioctl.h>
 #include <termios.h>
 
@@ -34,7 +35,7 @@ bool _kbhit()
     return byteswaiting > 0;
 }
 
-char _getch(void)
+char __getch(void)
 {
     char buf = 0;
     struct termios old = { 0 };
@@ -53,12 +54,12 @@ char _getch(void)
     old.c_lflag |= ECHO;
     if (tcsetattr(0, TCSADRAIN, &old) < 0)
         perror("tcsetattr ~ICANON");
-    //printf("%c\n", buf);
+//    printf("%c\n", buf);
     return buf;
  }
 
-//char _getch() { return getch(); }
-//void _putch(char) { putch();  }
+char _getch() { return getc(stdin); }
+void _putch(char ch) { /*putc(ch, stdout);*/ }
 
 #endif
 
@@ -159,7 +160,7 @@ public:
         }
         //printf("getc() ");
         char ch = _getch();
-        putc(ch,stdout);
+        _putch(ch);
         return ch;
         /*
         if( !isBufferEmpty() )
