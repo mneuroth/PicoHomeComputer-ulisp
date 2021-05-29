@@ -1,1 +1,1 @@
-gcc -DDESKTOP -DARDUINO_ARCH_PIC32  -Idesktop -I. picohomecomputer-ulisp.ino.cpp
+gcc -DDESKTOP -DARDUINO_ARCH_PIC32 -lm -Idesktop -I. picohomecomputer-ulisp.ino.cpp

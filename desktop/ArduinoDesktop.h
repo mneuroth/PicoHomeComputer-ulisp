@@ -3,13 +3,17 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <conio.h>
 #include <time.h>
 
 #ifdef _MSC_VER 
+#include <conio.h>
 //not #if defined(_WIN32) || defined(_WIN64) because we have strncasecmp in mingw
 #define strncasecmp _strnicmp
 #define strcasecmp _stricmp
+#else
+bool _kbhit() { return true; }
+char _getch() { return 0; }
+void _putch(char)  {}
 #endif
 
 #define HIGH 1
@@ -37,14 +41,18 @@ int T3CON;
 int PR3;
 int T3CONSET;
 
-typedef unsigned int uint32_t;
-typedef unsigned short uint16_t;
+#ifndef __linux__
 typedef unsigned char uint8_t;
+typedef unsigned short uint16_t;
+typedef unsigned int uint32_t;
 
-typedef int int32_t;
-typedef short int16_t;
 typedef char int8_t;
+typedef short int16_t;
+typedef int int32_t;
 typedef long int64_t;
+#else
+#include <cstdint>
+#endif
 
 typedef unsigned char byte;
 
